@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Geld.App/Geld.App.csproj" />
+    <Project Path="src/Geld.Domain/Geld.Domain.csproj" />
+    <Project Path="src/Geld.Server/Geld.Server.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Geld.App.Tests/Geld.App.Tests.csproj" />
+    <Project Path="tests/Geld.Domain.Tests/Geld.Domain.Tests.csproj" />
+    <Project Path="tests/Geld.Server.Tests/Geld.Server.Tests.csproj" />
+  </Folder>
+</Solution>

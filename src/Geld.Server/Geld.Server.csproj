@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Served as static files: the browser runs the app, this server only hosts it. -->
+    <ProjectReference Include="..\Geld.App\Geld.App.csproj" />
+  </ItemGroup>
+
+</Project>
