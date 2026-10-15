@@ -1,0 +1,262 @@
+/* Fonts are part of the app (SIL OFL, see fonts/), so they work offline. The UI is German: the Latin subset covers it. */
+@font-face { font-family: "Onest"; font-weight: 400 700; font-display: swap; src: url(fonts/onest-latin.woff2) format("woff2"); }
+@font-face { font-family: "Unbounded"; font-weight: 600 700; font-display: swap; src: url(fonts/unbounded-latin.woff2) format("woff2"); }
+
+/* One accent (gold) for the main action and for planned money. Ink marks fixed costs, red negative amounts.
+   Every text colour meets WCAG AA (4.5:1) on the surfaces it is used on, in both modes. */
+:root {
+  --bg: #FBF8F1;
+  --surface: #FFFFFF;
+  --ink: #111111;          /* outlines, shadows, strong fills */
+  --text: #111111;
+  --muted: #4A4A4A;
+  --faded: #6F6B62;        /* fixed costs already debited */
+  --faded-line: #CFCABE;
+  --gold: #FFCE00;
+  --on-gold: #111111;
+  --bad: #C0281B;
+  --on-state: #FFFFFF;     /* text on --bad */
+  --radius: 12px;
+  --tabbar: 64px;
+  --font: "Onest", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --display: "Unbounded", var(--font);
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16150F;
+    --surface: #22211B;
+    --ink: #EDE8DA;
+    --text: #F3EFE4;
+    --muted: #B7B2A5;
+    --faded: #9A9588;
+    --faded-line: #4A473E;
+    --bad: #FF7A6B;
+    --on-state: #111111;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 17px/1.45 var(--font);
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button, input, select { font: inherit; color: inherit; }
+a { color: inherit; }
+h2 { margin: 0; }
+
+.icon { width: 1.25em; height: 1.25em; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.display { font-family: var(--display); font-weight: 700; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* Top bar */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: env(safe-area-inset-top) max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left));
+  background: var(--bg);
+  border-bottom: 2px solid var(--ink);
+}
+.topbar .titles { flex: 1; min-width: 0; padding: 10px 0; }
+.topbar h1 { margin: 0; font: 700 17px/1.2 var(--display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topbar .kicker { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.topbar:has(.kicker) h1 { font-size: 24px; margin-top: 2px; }
+.icon-btn { display: grid; place-items: center; width: 44px; height: 44px; margin-left: -10px; border: 0; background: none; font-size: 22px; cursor: pointer; text-decoration: none; }
+.icon-btn.end-btn { margin: 0 -10px 0 0; }
+
+main {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 18px max(16px, env(safe-area-inset-right)) calc(var(--tabbar) + 28px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+}
+
+/* Tab bar: the main pages, within thumb reach */
+.tabbar {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  padding: 0 max(8px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(8px, env(safe-area-inset-left));
+  background: var(--bg);
+  border-top: 2px solid var(--ink);
+}
+.tabbar a {
+  display: flex;
+  flex: 1;
+  max-width: 200px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: var(--tabbar);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  text-decoration: none;
+}
+.tabbar a .icon { font-size: 22px; padding: 2px 14px; box-sizing: content-box; border-radius: 99px; }
+.tabbar a.active { color: var(--text); }
+.tabbar a.active .icon { background: var(--gold); color: var(--on-gold); box-shadow: 0 0 0 2px var(--ink); }
+
+/* Surfaces: thick outline and a flat offset shadow */
+.card, .btn, .modal-box, .field input, .field select, .banner {
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.card, .btn, .modal-box, .banner { box-shadow: 3px 3px 0 var(--ink); }
+.card { display: block; width: 100%; padding: 16px; margin-bottom: 16px; text-align: left; }
+.card > :first-child { margin-top: 0; }
+.card > :last-child { margin-bottom: 0; }
+button.card, a.card { cursor: pointer; text-decoration: none; transition: transform 100ms ease-out, box-shadow 100ms ease-out; }
+
+.muted { color: var(--muted); font-size: 15px; }
+.hint { color: var(--muted); font-size: 14px; margin: 8px 0 0; }
+.row { display: flex; gap: 10px; align-items: baseline; justify-content: space-between; }
+.label { color: var(--muted); font-size: 14px; }
+small { display: block; font-weight: 400; font-size: 14px; color: var(--muted); }
+
+/* Amounts: tabular figures, so they line up in lists */
+.amount { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.big { font: 700 32px/1.15 var(--display); margin: 2px 0 6px; letter-spacing: -.02em; }
+.negative { color: var(--bad); }
+
+/* Buttons: pressable, they sink into their shadow */
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 16px;
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 100ms ease-out, box-shadow 100ms ease-out;
+}
+.btn:active:not(:disabled), button.card:active, a.card:active, .banner:active { transform: translate(3px, 3px); box-shadow: none; }
+.btn.primary { background: var(--gold); color: var(--on-gold); }
+.btn.danger { color: var(--bad); }
+.btn:disabled { border-color: var(--faded-line); box-shadow: 3px 3px 0 var(--faded-line); color: var(--faded); cursor: default; }
+.btn.hero { min-height: 56px; font-size: 18px; margin-bottom: 14px; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 28px; }
+.pair .btn { margin: 0; }
+
+/* Next Kindergeld payment */
+.next { display: flex; align-items: center; gap: 12px; }
+.next > .icon { font-size: 26px; }
+.next > span { flex: 1; }
+
+/* Reminder to back up */
+.banner { display: flex; align-items: center; gap: 10px; padding: 10px 14px; margin-bottom: 16px; font-size: 15px; font-weight: 700; text-decoration: none; background: var(--gold); color: var(--on-gold); }
+.banner span { flex: 1; }
+
+/* Section headings with an action */
+.section { display: flex; align-items: center; gap: 10px; margin: 8px 0 10px; }
+.section h2 { flex: 1; font: 700 15px var(--display); }
+.section .icon-btn { margin: -8px -10px -8px 0; }
+
+/* Lists of entries */
+.list { padding: 0 16px; }
+.list ul { list-style: none; margin: 0; padding: 0; }
+.list li + li { border-top: 2px solid var(--faded-line); }
+.line { display: flex; width: 100%; align-items: center; gap: 12px; min-height: 56px; padding: 10px 0; border: 0; background: none; text-align: left; cursor: pointer; }
+.line .name { flex: 1; min-width: 0; }
+.line b { font-weight: 600; }
+.line .day { flex: none; width: 2.2em; font-weight: 700; font-variant-numeric: tabular-nums; }
+.line.done { color: var(--faded); }
+.line.done b, .line.done .amount { text-decoration: line-through; }
+.badge { display: inline-block; margin-left: 6px; padding: 0 8px; border-radius: 6px; background: var(--ink); color: var(--bg); font-size: 13px; font-weight: 700; }
+.empty { color: var(--muted); font-size: 15px; padding: 14px 0; margin: 0; }
+
+/* Month switcher */
+.month-nav { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+.month-nav span { flex: 1; text-align: center; font: 700 17px var(--display); }
+.month-nav .icon-btn { margin: 0; border: 2px solid var(--ink); border-radius: var(--radius); background: var(--surface); }
+.month-nav .icon-btn:disabled { border-color: var(--faded-line); color: var(--faded); cursor: default; }
+
+/* Budget: one bar, salary split into fixed costs (ink), planned (gold) and what is left */
+.split { display: flex; height: 16px; margin: 4px 0 10px; border: 2px solid var(--ink); border-radius: 99px; overflow: hidden; background: var(--surface); }
+.split .fixed { background: var(--ink); }
+.split .planned { background: var(--gold); }
+.split .planned:not(:first-child) { border-left: 2px solid var(--ink); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 14px; color: var(--muted); }
+.legend i { display: inline-block; width: 12px; height: 12px; margin-right: 6px; border: 2px solid var(--ink); border-radius: 3px; vertical-align: -1px; }
+.legend .fixed { background: var(--ink); }
+.legend .planned { background: var(--gold); }
+
+/* Statistics: ranked bars in one colour */
+.segmented { display: grid; grid-template-columns: repeat(3, 1fr); margin-bottom: 16px; border: 2px solid var(--ink); border-radius: var(--radius); overflow: hidden; box-shadow: 3px 3px 0 var(--ink); }
+.segmented button { min-height: 44px; border: 0; background: var(--surface); font-weight: 700; cursor: pointer; }
+.segmented button + button { border-left: 2px solid var(--ink); }
+.segmented button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.bars { display: grid; gap: 12px; }
+.bar-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; font-size: 15px; }
+.bar-row .track { grid-column: 1 / -1; height: 12px; }
+.bar-row .track > div { height: 100%; min-width: 3px; border-radius: 99px; background: var(--ink); }
+.months { display: grid; margin-top: 12px; grid-template-columns: 2.6em 1fr auto; gap: 6px 10px; align-items: center; font-size: 14px; }
+.months .pair-bars { display: grid; gap: 3px; }
+.months .pair-bars > div { height: 8px; min-width: 0; border-radius: 99px; }
+.months .in { background: var(--ink); }
+.months .out { border: 2px solid var(--ink); background: var(--surface); }
+.months .amount { text-align: right; }
+
+/* Settings */
+.setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; }
+.setting + .setting { border-top: 2px solid var(--faded-line); padding-top: 12px; margin-top: 12px; }
+.stepper { display: flex; align-items: center; gap: 4px; }
+.stepper output { min-width: 2ch; text-align: center; font: 700 18px var(--display); }
+.stepper .icon-btn { margin: 0; border: 2px solid var(--ink); border-radius: var(--radius); background: var(--surface); }
+.stepper .icon-btn:disabled { border-color: var(--faded-line); color: var(--faded); cursor: default; }
+.setting select { min-height: 44px; min-width: 5em; padding: 6px 10px; border: 2px solid var(--ink); border-radius: var(--radius); background: var(--surface); }
+.card .setting + .btn { margin-top: 16px; }
+.card .btn + .btn { margin-top: 14px; }
+
+/* Forms */
+.field { display: block; margin-bottom: 14px; }
+.field > span { display: block; margin-bottom: 4px; font-size: 14px; font-weight: 700; }
+.field input, .field select { width: 100%; min-height: 48px; padding: 10px 14px; }
+.field input:focus, .field select:focus, .setting select:focus { outline: 3px solid var(--gold); outline-offset: 1px; }
+.field .error { color: var(--bad); font-size: 14px; margin-top: 4px; }
+.fields { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+
+/* Dialogs and sheets */
+.modal { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 24px; background: rgba(0, 0, 0, .55); }
+.modal-box { width: 100%; max-width: 400px; padding: 20px; }
+.modal-box > p { margin: 0 0 4px; font-size: 18px; font-weight: 700; }
+.nav { display: flex; gap: 14px; margin-top: 20px; }
+.nav .btn { margin: 0; }
+/* Near the top, so the phone's keyboard doesn't cover the form. */
+.sheet-backdrop { align-items: start; padding-top: max(24px, env(safe-area-inset-top)); overflow-y: auto; }
+.sheet-head { align-items: center; margin: -6px 0 12px; }
+.sheet-head h2 { font: 700 18px var(--display); }
+.sheet-head .icon-btn { margin: 0 -10px 0 0; }
+
+#blazor-error-ui {
+  display: none;
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: 1000;
+  padding: 12px max(16px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  background: var(--bad);
+  color: var(--on-state);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn, button.card, a.card { transition: none; }
+}
