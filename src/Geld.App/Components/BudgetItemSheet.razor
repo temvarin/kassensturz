@@ -1,0 +1,74 @@
+@* Adds or edits a fixed cost (with a day of the month) or a planned spending (without). The page applies the result. *@
+
+<Sheet Title="@Title" OnClose="OnClose">
+    <form @onsubmit="Submit">
+        <label class="field">
+            <span>Wofür</span>
+            <input @bind="name" placeholder="@NamePlaceholder" autocomplete="off" aria-invalid="@(nameError ? "true" : null)" />
+            @if (nameError)
+            {
+                <div class="error" role="alert">Bitte benennen</div>
+            }
+        </label>
+        <div class="fields">
+            <AmountField @bind-Value="amount" Error="@amountError" />
+            @if (Day is not null)
+            {
+                <label class="field">
+                    <span>Abbuchung am</span>
+                    <select @bind="day">
+                        @for (var d = 1; d <= 31; d++)
+                        {
+                            <option value="@d">@(d).</option>
+                        }
+                    </select>
+                </label>
+            }
+        </div>
+        <button type="submit" class="btn primary">Speichern</button>
+        @if (OnDelete.HasDelegate)
+        {
+            <button type="button" class="btn danger" @onclick="OnDelete"><Icon Name="trash" />Löschen</button>
+        }
+    </form>
+</Sheet>
+
+@code {
+    public sealed record Result(string Name, decimal Amount, int? Day);
+
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public string NamePlaceholder { get; set; } = "";
+    [Parameter] public string Name { get; set; } = "";
+    [Parameter] public decimal? Amount { get; set; }
+
+    /// <summary>Day of the month for a fixed cost; null for a planned spending, which has no day.</summary>
+    [Parameter] public int? Day { get; set; }
+
+    [Parameter, EditorRequired] public EventCallback<Result> OnSave { get; set; }
+
+    /// <summary>Shows a delete button when set (when editing).</summary>
+    [Parameter] public EventCallback OnDelete { get; set; }
+
+    [Parameter, EditorRequired] public EventCallback OnClose { get; set; }
+
+    private string name = "", amount = "";
+    private int day;
+    private bool nameError;
+    private string? amountError;
+
+    protected override void OnInitialized()
+    {
+        name = Name;
+        amount = Amount is { } a ? Euro.ToInput(a) : "";
+        day = Day ?? 1;
+    }
+
+    private async Task Submit()
+    {
+        nameError = string.IsNullOrWhiteSpace(name);
+        var validAmount = Euro.TryParse(amount, out var value);
+        amountError = validAmount ? null : AmountField.Hint;
+        if (nameError || !validAmount) return;
+        await OnSave.InvokeAsync(new Result(name, value, Day is null ? null : day));
+    }
+}

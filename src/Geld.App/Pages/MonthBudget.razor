@@ -1,0 +1,218 @@
+@page "/budget"
+@inject AppState State
+@inject TimeProvider Clock
+
+<TopBar Title="Budget" Kicker="@(Budget.NetSalary > 0 ? $"Netto {Euro.Format(Budget.NetSalary)}" : "Monatsbudget")" />
+<BackupBanner />
+
+@* Only the current and later months: past months would be recomputed with today's salary and costs. *@
+<div class="month-nav">
+    <button class="icon-btn" aria-label="Vorheriger Monat" disabled="@(offset == 0)" @onclick="() => Go(-1)"><Icon Name="chevron-left" /></button>
+    <span>@German.Month(Month.Year, Month.Month)</span>
+    <button class="icon-btn" aria-label="Nächster Monat" @onclick="() => Go(1)"><Icon Name="chevron-right" /></button>
+</div>
+
+<button class="card" @onclick="() => sheet = Sheet.Salary">
+    @if (Budget.NetSalary == 0)
+    {
+        <div class="row"><b>Nettogehalt eintragen</b><Icon Name="chevron-right" /></div>
+        <small>Davon gehen Fixkosten und Geplantes ab; der Rest ist frei verfügbar.</small>
+    }
+    else
+    {
+        <div class="label">Frei verfügbar</div>
+        <div class="big amount @(overview.Available < 0 ? "negative" : null)">@Euro.Format(overview.Available)</div>
+        <div class="split" aria-hidden="true">
+            <div class="fixed" style="width: @Percent(overview.FixedTotal)"></div>
+            <div class="planned" style="width: @Percent(overview.PlannedTotal)"></div>
+        </div>
+        <div class="legend">
+            <span><i class="fixed"></i>@Euro.Format(overview.FixedTotal) Fixkosten</span>
+            <span><i class="planned"></i>@Euro.Format(overview.PlannedTotal) geplant</span>
+        </div>
+    }
+</button>
+
+<div class="section">
+    <h2>Fixkosten</h2>
+    @if (offset == 0 && overview.StillToPay > 0)
+    {
+        <span class="muted">noch @Euro.Format(overview.StillToPay) offen</span>
+    }
+    <button class="icon-btn" aria-label="Fixkosten hinzufügen" @onclick="() => Open(Sheet.Deduction)"><Icon Name="plus" /></button>
+</div>
+<div class="card list">
+    @if (overview.Deductions.Count == 0)
+    {
+        <p class="empty">Miete, Abos, Versicherungen: alles, was jeden Monat abgebucht wird.</p>
+    }
+    else
+    {
+        <ul>
+            @foreach (var line in overview.Deductions)
+            {
+                <li>
+                    <button class="line @(line.Done ? "done" : null)" @onclick="() => Open(Sheet.Deduction, line.Deduction.Id)">
+                        <span class="day">@(line.Date.Day).</span>
+                        <span class="name">
+                            <b>@line.Deduction.Name</b>
+                            @if (line == nextDue)
+                            {
+                                <span class="badge">@German.Relative(line.Date, today)</span>
+                            }
+                        </span>
+                        <span class="amount">@Euro.Format(line.Deduction.Amount)</span>
+                    </button>
+                </li>
+            }
+        </ul>
+    }
+</div>
+
+<div class="section">
+    <h2>Geplant im @German.MonthName(Month.Month)</h2>
+    <button class="icon-btn" aria-label="Geplante Ausgabe hinzufügen" @onclick="() => Open(Sheet.Planned)"><Icon Name="plus" /></button>
+</div>
+<div class="card list">
+    @if (overview.Planned.Count == 0)
+    {
+        <p class="empty">Was du dir diesen Monat noch kaufen willst, z. B. Make-up oder ein Geschenk.</p>
+    }
+    else
+    {
+        <ul>
+            @foreach (var planned in overview.Planned)
+            {
+                <li>
+                    <button class="line" @onclick="() => Open(Sheet.Planned, planned.Id)">
+                        <span class="name"><b>@planned.Name</b></span>
+                        <span class="amount">@Euro.Format(planned.Amount)</span>
+                    </button>
+                </li>
+            }
+        </ul>
+    }
+</div>
+
+@switch (sheet)
+{
+    case Sheet.Salary:
+        <Sheet Title="Nettogehalt" OnClose="Close">
+            <form @onsubmit="SaveSalary">
+                <AmountField Label="Netto pro Monat in €" @bind-Value="salary" Error="@salaryError" Autofocus />
+                <button type="submit" class="btn primary">Speichern</button>
+            </form>
+        </Sheet>
+        break;
+    case Sheet.Deduction:
+        var deduction = Budget.Deductions.FirstOrDefault(d => d.Id == editId);
+        <BudgetItemSheet Title="@(deduction is null ? "Fixkosten" : "Fixkosten bearbeiten")" NamePlaceholder="Miete"
+                         Name="@(deduction?.Name ?? "")" Amount="deduction?.Amount" Day="deduction?.Day ?? 1"
+                         OnSave="SaveDeduction" OnDelete="deduction is null ? default : EventCallback.Factory.Create(this, DeleteDeduction)"
+                         OnClose="Close" />
+        break;
+    case Sheet.Planned:
+        var planned = Budget.Planned.FirstOrDefault(p => p.Id == editId);
+        <BudgetItemSheet Title="@(planned is null ? $"Geplant im {German.MonthName(Month.Month)}" : "Geplantes bearbeiten")" NamePlaceholder="Make-up"
+                         Name="@(planned?.Name ?? "")" Amount="planned?.Amount"
+                         OnSave="SavePlanned" OnDelete="planned is null ? default : EventCallback.Factory.Create(this, DeletePlanned)"
+                         OnClose="Close" />
+        break;
+}
+
+@code {
+    private enum Sheet { None, Salary, Deduction, Planned }
+
+    private DateOnly today;
+    private int offset; // months after the current one
+    private Sheet sheet;
+    private Guid? editId;
+    private string salary = "";
+    private string? salaryError;
+
+    private Budget Budget => State.Data.Budget;
+    private DateOnly Month => new DateOnly(today.Year, today.Month, 1).AddMonths(offset);
+    private MonthOverview overview = null!;
+    private DeductionLine? nextDue;
+
+    protected override void OnInitialized()
+    {
+        today = Clock.Today();
+        Refresh();
+    }
+
+    private void Go(int months)
+    {
+        offset += months;
+        Refresh();
+    }
+
+    private void Refresh()
+    {
+        overview = Budget.Overview(Month.Year, Month.Month, today);
+        nextDue = offset == 0 ? overview.Deductions.FirstOrDefault(d => !d.Done) : null;
+    }
+
+    /// <summary>Share of the salary, for the bar; capped at the whole bar when more is taken than earned.</summary>
+    private string Percent(decimal amount)
+    {
+        var whole = Math.Max(overview.Salary, overview.FixedTotal + overview.PlannedTotal);
+        return whole == 0 ? "0%" : $"{Math.Round(amount / whole * 100, 2).ToString(CultureInfo.InvariantCulture)}%";
+    }
+
+    private void Open(Sheet kind, Guid? id = null)
+    {
+        (sheet, editId) = (kind, id);
+        if (kind == Sheet.Salary) (salary, salaryError) = (Budget.NetSalary > 0 ? Euro.ToInput(Budget.NetSalary) : "", null);
+    }
+
+    private void Close() => (sheet, editId) = (Sheet.None, null);
+
+    private void Saved()
+    {
+        State.Save();
+        Close();
+        Refresh();
+    }
+
+    private void SaveSalary()
+    {
+        if (!Euro.TryParse(salary, out var value))
+        {
+            salaryError = AmountField.Hint;
+            return;
+        }
+        Budget.SetSalary(value);
+        Saved();
+    }
+
+    private void SaveDeduction(BudgetItemSheet.Result r)
+    {
+        if (Budget.Deductions.FirstOrDefault(d => d.Id == editId) is { } existing)
+            Budget.UpdateDeduction(existing with { Name = r.Name, Amount = r.Amount, Day = r.Day!.Value });
+        else
+            Budget.AddDeduction(r.Name, r.Amount, r.Day!.Value);
+        Saved();
+    }
+
+    private void DeleteDeduction()
+    {
+        Budget.RemoveDeduction(editId!.Value);
+        Saved();
+    }
+
+    private void SavePlanned(BudgetItemSheet.Result r)
+    {
+        if (Budget.Planned.FirstOrDefault(p => p.Id == editId) is { } existing)
+            Budget.UpdatePlanned(existing with { Name = r.Name, Amount = r.Amount });
+        else
+            Budget.Plan(Month.Year, Month.Month, r.Name, r.Amount);
+        Saved();
+    }
+
+    private void DeletePlanned()
+    {
+        Budget.RemovePlanned(editId!.Value);
+        Saved();
+    }
+}

@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#FBF8F1" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#16150F" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Kassensturz">
+  <title>Kassensturz – Kindergeld und Monatsbudget</title>
+  <base href="/">
+  <link rel="preload" href="fonts/onest-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/unbounded-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" href="icons/favicon-32.png" sizes="32x32">
+  <link rel="icon" href="icons/icon-192.png" sizes="192x192">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <header class="topbar"><div class="titles"><h1>Kassensturz</h1></div></header>
+    <main><p class="muted">Wird geladen …</p></main>
+  </div>
+  <div id="blazor-error-ui">
+    Ein Fehler ist aufgetreten. <a href="." class="reload">Neu laden</a>
+  </div>
+  <script src="browser.js"></script>
+  <script src="_framework/blazor.webassembly.js"></script>
+  <script>navigator.serviceWorker?.register('service-worker.js', { updateViaCache: 'none' });</script>
+</body>
+</html>

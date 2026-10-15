@@ -1,0 +1,16 @@
+@* A form over the page, e.g. to add or edit an entry. Closes on the button or a tap outside. *@
+<div class="modal sheet-backdrop" @onclick="OnClose">
+    <div class="modal-box sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" @onclick:stopPropagation>
+        <div class="row sheet-head">
+            <h2 id="sheet-title">@Title</h2>
+            <button class="icon-btn" aria-label="Schließen" @onclick="OnClose"><Icon Name="x" /></button>
+        </div>
+        @ChildContent
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter, EditorRequired] public EventCallback OnClose { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

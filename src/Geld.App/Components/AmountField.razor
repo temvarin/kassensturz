@@ -1,0 +1,32 @@
+@* An amount in euros, typed as text: the phone shows a number pad with a comma or a dot (Euro.TryParse reads both). *@
+
+<label class="field">
+    <span>@Label</span>
+    <input @ref="input" value="@Value" @onchange="Changed" inputmode="decimal" placeholder="0,00" autocomplete="off"
+           aria-invalid="@(Error is not null ? "true" : null)" />
+    @if (Error is not null)
+    {
+        <div class="error" role="alert">@Error</div>
+    }
+</label>
+
+@code {
+    public const string Hint = "Z. B. 12,50 eingeben";
+
+    private ElementReference input;
+
+    [Parameter] public string Label { get; set; } = "Betrag in €";
+    [Parameter] public string Value { get; set; } = "";
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public string? Error { get; set; }
+
+    /// <summary>Focuses the field when the form opens.</summary>
+    [Parameter] public bool Autofocus { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && Autofocus) await input.FocusAsync();
+    }
+
+    private Task Changed(ChangeEventArgs e) => ValueChanged.InvokeAsync(e.Value?.ToString() ?? "");
+}

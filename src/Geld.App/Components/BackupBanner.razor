@@ -1,0 +1,12 @@
+@* Reminds the user that the data lives only in this browser until it is backed up. *@
+@inject AppState State
+@inject TimeProvider Clock
+
+@if (State.Data.NeedsBackup(Clock.Today()))
+{
+    <a class="banner" href="einstellungen">
+        <Icon Name="cloud-upload" />
+        <span>@(State.Data.LastBackup is null ? "Noch keine Sicherung" : $"Letzte Sicherung {German.Relative(State.Data.LastBackup.Value, Clock.Today())}") – jetzt sichern</span>
+        <Icon Name="chevron-right" />
+    </a>
+}

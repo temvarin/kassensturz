@@ -1,0 +1,18 @@
+@inherits LayoutComponentBase
+@inject Browser Browser
+
+<header class="topbar">
+    <SectionOutlet SectionName="@TopBar.Section" />
+</header>
+<main aria-live="polite">
+    @Body
+</main>
+<TabBar />
+<DialogHost />
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await Browser.ProtectStorageAsync();
+    }
+}

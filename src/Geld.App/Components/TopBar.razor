@@ -1,0 +1,37 @@
+@* The page's header, rendered into the layout's top bar, and the browser tab's title. *@
+@inject NavigationManager Nav
+
+<PageTitle>@Title – @AppName</PageTitle>
+<SectionContent SectionName="@Section">
+    @if (Back is not null)
+    {
+        <button class="icon-btn" aria-label="Zurück" @onclick="() => Nav.NavigateTo(Back)"><Icon Name="arrow-left" /></button>
+    }
+    <div class="titles">
+        @if (Kicker is not null)
+        {
+            <div class="kicker">@Kicker</div>
+        }
+        <h1>@Title</h1>
+    </div>
+    @if (Back is null)
+    {
+        <a class="icon-btn end-btn" href="einstellungen" aria-label="Einstellungen"><Icon Name="settings" /></a>
+    }
+</SectionContent>
+
+@code {
+    public const string Section = "topbar";
+    public const string AppName = "Kassensturz";
+
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    /// <summary>Small line above the title; makes the title larger.</summary>
+    [Parameter] public string? Kicker { get; set; }
+
+    /// <summary>
+    /// Where the back button leads (relative to the app's base address). Without one, the page is a main page
+    /// and the bar links to the settings instead.
+    /// </summary>
+    [Parameter] public string? Back { get; set; }
+}

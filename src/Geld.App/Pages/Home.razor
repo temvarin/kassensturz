@@ -1,0 +1,121 @@
+@page "/"
+@inject AppState State
+@inject TimeProvider Clock
+
+<TopBar Title="Kindergeld" Kicker="@Kicker" />
+<BackupBanner />
+
+<div class="card">
+    <div class="label">Übrig im Topf</div>
+    <div class="big amount @(Pot.Balance < 0 ? "negative" : null)">@Euro.Format(Pot.Balance)</div>
+    <div class="row muted">
+        <span>@Euro.Format(Pot.Received) erhalten</span>
+        <span>@Euro.Format(Pot.Spent) ausgegeben</span>
+    </div>
+</div>
+
+@if (Pot.EndDigit is null)
+{
+    <a class="card next" href="einstellungen">
+        <Icon Name="calendar-event" />
+        <span><b>Endziffer eintragen</b><small>Dann steht hier, wann das nächste Kindergeld kommt.</small></span>
+        <Icon Name="chevron-right" />
+    </a>
+}
+else if (Pot.NextPayment(today) is { } next)
+{
+    <div class="card next">
+        <Icon Name="calendar-event" />
+        <span><b>@German.DayMonth(next)</b><small>Nächste Überweisung · @German.Relative(next, today)</small></span>
+        <b class="amount">@Euro.Format(Pot.QuickAmount)</b>
+    </div>
+}
+else
+{
+    <div class="card next">
+        <Icon Name="calendar-event" />
+        <span><b>Termine noch nicht veröffentlicht</b><small>Die Familienkasse nennt sie <a href="@Familienkasse.ScheduleSource" target="_blank" rel="noopener">auf ihrer Seite</a>.</small></span>
+    </div>
+}
+
+<button class="btn primary hero" @onclick="ReceiveMonth"><Icon Name="plus" />@Euro.Format(Pot.QuickAmount) erhalten</button>
+<div class="pair">
+    <button class="btn" @onclick="() => Open(EntryKind.Payment)">Anderer Betrag</button>
+    <button class="btn" @onclick="() => Open(EntryKind.Spending)"><Icon Name="minus" />Ausgabe</button>
+</div>
+
+<div class="section"><h2>Buchungen</h2></div>
+<div class="card list">
+    @if (Pot.Entries.Count == 0)
+    {
+        <p class="empty">Noch nichts gebucht. Trag ein, was ankommt und was du für die Kinder ausgibst – auch einen Anfangsbestand über „Anderer Betrag“.</p>
+    }
+    else
+    {
+        <ul>
+            @foreach (var entry in Pot.Entries)
+            {
+                <li>
+                    <button class="line" @onclick="() => Edit(entry)">
+                        <span class="name"><b>@Name(entry)</b><small>@Details(entry)</small></span>
+                        <b class="amount">@Euro.WithSign(entry.Kind == EntryKind.Payment ? entry.Amount : -entry.Amount)</b>
+                    </button>
+                </li>
+            }
+        </ul>
+    }
+</div>
+
+@if (sheetKind is { } kind)
+{
+    <EntrySheet Kind="kind" Existing="editing" Today="today" Suggestions="Pot.CategorySuggestions()"
+                OnSave="Save" OnDelete="Delete" OnClose="Close" />
+}
+
+@code {
+    private DateOnly today;
+    private EntryKind? sheetKind;
+    private Entry? editing;
+
+    private KindergeldPot Pot => State.Data.Kindergeld;
+
+    private string Kicker =>
+        $"{Pot.Children} {(Pot.Children == 1 ? "Kind" : "Kinder")} · {(Pot.EndDigit is { } d ? $"Endziffer {d}" : "Endziffer fehlt")}";
+
+    protected override void OnInitialized() => today = Clock.Today();
+
+    /// <summary>One month of Kindergeld, booked today: the common case is a single tap.</summary>
+    private void ReceiveMonth()
+    {
+        Pot.Receive(today, Pot.QuickAmount);
+        State.Save();
+    }
+
+    private void Open(EntryKind kind) => (sheetKind, editing) = (kind, null);
+
+    private void Edit(Entry entry) => (sheetKind, editing) = (entry.Kind, entry);
+
+    private void Close() => (sheetKind, editing) = (null, null);
+
+    private void Save(EntrySheet.Result r)
+    {
+        if (editing is not null) Pot.Update(editing with { Date = r.Date, Amount = r.Amount, Category = r.Category, Note = r.Note });
+        else if (sheetKind == EntryKind.Payment) Pot.Receive(r.Date, r.Amount, r.Note);
+        else Pot.Spend(r.Date, r.Amount, r.Category, r.Note);
+        State.Save();
+        Close();
+    }
+
+    private void Delete()
+    {
+        if (editing is null) return;
+        Pot.Remove(editing.Id);
+        State.Save();
+        Close();
+    }
+
+    private static string Name(Entry e) => e.Note ?? (e.Kind == EntryKind.Payment ? "Kindergeld" : e.Category!);
+
+    private static string Details(Entry e) =>
+        e.Kind == EntryKind.Spending && e.Note is not null ? $"{e.Category} · {German.Date(e.Date)}" : German.Date(e.Date);
+}

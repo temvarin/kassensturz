@@ -1,0 +1,118 @@
+@page "/einstellungen"
+@inject AppState State
+@inject TimeProvider Clock
+@inject Browser Browser
+@inject Dialogs Dialogs
+
+<TopBar Title="Einstellungen" Back="" />
+
+<div class="section"><h2>Kindergeld</h2></div>
+<div class="card">
+    <div class="setting">
+        <span>Kinder</span>
+        <div class="stepper">
+            <button class="icon-btn" aria-label="Ein Kind weniger" disabled="@(Pot.Children == 1)" @onclick="() => SetChildren(Pot.Children - 1)"><Icon Name="minus" /></button>
+            <output aria-live="polite">@Pot.Children</output>
+            <button class="icon-btn" aria-label="Ein Kind mehr" @onclick="() => SetChildren(Pot.Children + 1)"><Icon Name="plus" /></button>
+        </div>
+    </div>
+    <div class="setting">
+        <label for="end-digit">Endziffer<small>Letzte Ziffer der Kindergeldnummer, steht auf jedem Schreiben der Familienkasse</small></label>
+        <select id="end-digit" value="@(Pot.EndDigit?.ToString(CultureInfo.InvariantCulture) ?? "")" @onchange="SetEndDigit">
+            <option value="">–</option>
+            @for (var d = 0; d <= 9; d++)
+            {
+                <option value="@d">@d</option>
+            }
+        </select>
+    </div>
+</div>
+
+<div class="section"><h2>Sicherung</h2></div>
+<div class="card">
+    <p class="hint">
+        Deine Daten liegen nur in diesem Browser. Wird die App gelöscht oder das Handy gewechselt, sind sie weg –
+        außer du hast eine Sicherung.
+    </p>
+    <div class="setting">
+        <span>Letzte Sicherung</span>
+        <b>@(State.Data.LastBackup is { } last ? German.Relative(last, today) : "noch nie")</b>
+    </div>
+    <div class="setting">
+        <span>Vor Speichermangel geschützt<small>Entscheidet der Browser</small></span>
+        <b>@(storageProtected switch { true => "ja", false => "nein", null => "…" })</b>
+    </div>
+    <button class="btn primary" @onclick="Export"><Icon Name="download" />Sicherung speichern</button>
+    <label class="btn">
+        <Icon Name="upload" />Sicherung laden
+        <InputFile class="visually-hidden" accept=".json,application/json" OnChange="Import" />
+    </label>
+</div>
+
+@code {
+    private const long MaxBackupBytes = 5_000_000;
+
+    private DateOnly today;
+    private bool? storageProtected;
+
+    private KindergeldPot Pot => State.Data.Kindergeld;
+
+    protected override void OnInitialized() => today = Clock.Today();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        storageProtected = await Browser.ProtectStorageAsync();
+        StateHasChanged();
+    }
+
+    private void SetChildren(int children)
+    {
+        Pot.Configure(children, Pot.EndDigit);
+        State.Save();
+    }
+
+    private void SetEndDigit(ChangeEventArgs e)
+    {
+        Pot.Configure(Pot.Children, int.TryParse(e.Value?.ToString(), CultureInfo.InvariantCulture, out var d) ? d : null);
+        State.Save();
+    }
+
+    private async Task Export()
+    {
+        var fileName = $"{TopBar.AppName.ToLowerInvariant()}-{today:yyyy-MM-dd}.json";
+        if (await Browser.SaveFileAsync(fileName, DataStore.Backup(State.Data, today)))
+        {
+            State.Data.MarkBackedUp(today);
+            State.Save();
+        }
+    }
+
+    private async Task Import(InputFileChangeEventArgs e)
+    {
+        string json;
+        try
+        {
+            using var reader = new StreamReader(e.File.OpenReadStream(MaxBackupBytes));
+            json = await reader.ReadToEndAsync();
+        }
+        catch (IOException)
+        {
+            Dialogs.Alert("Die Datei ließ sich nicht lesen. Ist sie größer als 5 MB?");
+            return;
+        }
+
+        if (DataStore.TryRead(json) is not { } data)
+        {
+            Dialogs.Alert($"Das ist keine Sicherung von {TopBar.AppName}.");
+            return;
+        }
+        if (!State.Data.IsEmpty && !await Dialogs.Confirm(
+                "Alle Daten auf diesem Gerät durch die Sicherung ersetzen?", ok: "Ersetzen", cancel: "Abbrechen", danger: true))
+        {
+            return;
+        }
+        State.Replace(data);
+        Dialogs.Alert("Sicherung geladen.");
+    }
+}

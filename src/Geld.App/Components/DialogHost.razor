@@ -1,0 +1,38 @@
+@implements IDisposable
+@inject Dialogs Dialogs
+@inject NavigationManager Nav
+
+@if (Dialogs.Current is { } m)
+{
+    <div class="modal">
+        <div class="modal-box" role="alertdialog" aria-modal="true">
+            <p>@m.Message</p>
+            <div class="nav">
+                @if (m.Cancel is not null)
+                {
+                    <button class="btn" @onclick="() => Dialogs.Close(false)">@m.Cancel</button>
+                }
+                <button class="btn @(m.Danger ? "danger" : "primary")" @onclick="() => Dialogs.Close(true)">@m.Ok</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    protected override void OnInitialized()
+    {
+        Dialogs.Changed += OnChanged;
+        Nav.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    // A dialog belongs to the page that opened it.
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => Dialogs.Close();
+
+    public void Dispose()
+    {
+        Dialogs.Changed -= OnChanged;
+        Nav.LocationChanged -= OnLocationChanged;
+    }
+}

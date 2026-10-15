@@ -1,0 +1,81 @@
+@* Adds or edits a Kindergeld entry. The page applies the result to the pot. *@
+
+<Sheet Title="@title" OnClose="OnClose">
+    <form @onsubmit="Submit">
+        <div class="fields">
+            <AmountField @bind-Value="amount" Error="@amountError" Autofocus />
+            <label class="field">
+                <span>Datum</span>
+                <input type="date" @bind="date" required />
+            </label>
+        </div>
+        @if (Kind == EntryKind.Spending)
+        {
+            <label class="field">
+                <span>Kategorie</span>
+                <input @bind="category" list="categories" placeholder="@KindergeldPot.DefaultCategory" autocomplete="off" />
+                <datalist id="categories">
+                    @foreach (var c in Suggestions)
+                    {
+                        <option value="@c"></option>
+                    }
+                </datalist>
+            </label>
+        }
+        <label class="field">
+            <span>Notiz (optional)</span>
+            <input @bind="note" placeholder="@(Kind == EntryKind.Spending ? "Winterjacke" : "Nachzahlung")" />
+        </label>
+        <button type="submit" class="btn primary">Speichern</button>
+        @if (Existing is not null)
+        {
+            <button type="button" class="btn danger" @onclick="OnDelete"><Icon Name="trash" />Löschen</button>
+        }
+    </form>
+</Sheet>
+
+@code {
+    public sealed record Result(DateOnly Date, decimal Amount, string? Category, string? Note);
+
+    [Parameter, EditorRequired] public EntryKind Kind { get; set; }
+
+    /// <summary>The entry to edit; null to add a new one.</summary>
+    [Parameter] public Entry? Existing { get; set; }
+
+    [Parameter, EditorRequired] public DateOnly Today { get; set; }
+    [Parameter] public IReadOnlyList<string> Suggestions { get; set; } = [];
+    [Parameter, EditorRequired] public EventCallback<Result> OnSave { get; set; }
+    [Parameter] public EventCallback OnDelete { get; set; }
+    [Parameter, EditorRequired] public EventCallback OnClose { get; set; }
+
+    private string title = "";
+    private string amount = "";
+    private string? amountError;
+    private DateOnly date;
+    private string? category, note;
+
+    protected override void OnInitialized()
+    {
+        title = (Kind, Existing) switch
+        {
+            (EntryKind.Payment, null) => "Geld erhalten",
+            (EntryKind.Payment, _) => "Eingang bearbeiten",
+            (_, null) => "Ausgabe",
+            _ => "Ausgabe bearbeiten",
+        };
+        amount = Existing is null ? "" : Euro.ToInput(Existing.Amount);
+        date = Existing?.Date ?? Today;
+        category = Existing?.Category;
+        note = Existing?.Note;
+    }
+
+    private async Task Submit()
+    {
+        if (!Euro.TryParse(amount, out var value))
+        {
+            amountError = AmountField.Hint;
+            return;
+        }
+        await OnSave.InvokeAsync(new Result(date, value, category, note));
+    }
+}

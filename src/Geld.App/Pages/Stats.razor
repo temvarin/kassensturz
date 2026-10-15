@@ -1,0 +1,102 @@
+@page "/statistik"
+@inject AppState State
+@inject TimeProvider Clock
+
+<TopBar Title="Statistik" Kicker="Kindergeld" />
+
+<div class="segmented" role="group" aria-label="Zeitraum">
+    @foreach (var p in Enum.GetValues<Period>())
+    {
+        <button aria-pressed="@(period == p ? "true" : "false")" @onclick="() => Show(p)">@Label(p)</button>
+    }
+</div>
+
+<div class="section">
+    <h2>Ausgaben nach Kategorie</h2>
+    <span class="muted amount">@Euro.Format(byCategory.Sum(c => c.Amount))</span>
+</div>
+<div class="card">
+    @if (byCategory.Count == 0)
+    {
+        <p class="empty">Keine Ausgaben @(period switch { Period.Month => "in diesem Monat", Period.Year => "in diesem Jahr", _ => "bisher" }).</p>
+    }
+    else
+    {
+        @* Ranked bars in one colour: the length carries the comparison, the label the identity. *@
+        <div class="bars">
+            @foreach (var c in byCategory)
+            {
+                <div class="bar-row">
+                    <span>@c.Category</span>
+                    <span class="amount">@Euro.Format(c.Amount)</span>
+                    <div class="track"><div style="width: @Share(c.Amount, byCategory[0].Amount)"></div></div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<div class="section"><h2>Pro Monat</h2></div>
+<div class="card">
+    @if (monthly.Count == 0)
+    {
+        <p class="empty">Noch keine Buchungen in den letzten zwölf Monaten.</p>
+    }
+    else
+    {
+        <div class="legend">
+            <span><i class="fixed"></i>erhalten</span>
+            <span><i></i>ausgegeben</span>
+        </div>
+        <div class="months">
+            @foreach (var m in monthly)
+            {
+                <span class="label">@German.MonthShort(m.Month)</span>
+                <div class="pair-bars" aria-hidden="true">
+                    <div class="in" style="width: @Share(m.In, monthlyMax)" hidden="@(m.In == 0)"></div>
+                    <div class="out" style="width: @Share(m.Out, monthlyMax)" hidden="@(m.Out == 0)"></div>
+                </div>
+                <span class="amount">@Euro.WithSign(m.In)<small>@Euro.WithSign(-m.Out)</small></span>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private enum Period { Month, Year, All }
+
+    private DateOnly today;
+    private Period period = Period.Year;
+    private IReadOnlyList<MonthTotals> monthly = [];
+    private decimal monthlyMax;
+
+    private KindergeldPot Pot => State.Data.Kindergeld;
+
+    private IReadOnlyList<CategoryTotal> byCategory = [];
+
+    protected override void OnInitialized()
+    {
+        today = Clock.Today();
+        Show(period);
+        // Newest first, from the first month with an entry: a new pot shouldn't show a year of empty rows.
+        monthly = [.. Pot.MonthlyTotals(today, 12).SkipWhile(m => m.In == 0 && m.Out == 0).Reverse()];
+        monthlyMax = monthly.Select(m => Math.Max(m.In, m.Out)).DefaultIfEmpty().Max();
+    }
+
+    private void Show(Period p)
+    {
+        period = p;
+        var month = new DateOnly(today.Year, today.Month, 1);
+        byCategory = p switch
+        {
+            Period.Month => Pot.SpendingByCategory(month, month.AddMonths(1).AddDays(-1)),
+            Period.Year => Pot.SpendingByCategory(new DateOnly(today.Year, 1, 1), new DateOnly(today.Year, 12, 31)),
+            _ => Pot.SpendingByCategory(DateOnly.MinValue, DateOnly.MaxValue),
+        };
+    }
+
+    private static string Label(Period p) => p switch { Period.Month => "Monat", Period.Year => "Jahr", _ => "Gesamt" };
+
+    private static string Share(decimal amount, decimal max) =>
+        max == 0 ? "0%" : $"{Math.Round(amount / max * 100, 2).ToString(CultureInfo.InvariantCulture)}%";
+}
