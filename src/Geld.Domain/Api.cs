@@ -8,7 +8,16 @@ namespace Geld.Domain;
 /// <param name="Name">For display only, usually the email address.</param>
 public sealed record WhoAmI(string Id, string Name, bool Member);
 
-/// <summary>The API's JSON, shared by server and app. Generated at build time, so the trimmed app can read it.</summary>
-[JsonSourceGenerationOptions(JsonSerializerDefaults.Web)]
+/// <summary>
+/// The API's JSON, shared by server and app; the server stores the documents in it too. Generated at build time, so the
+/// trimmed app can read it. Strict about what arrives: a missing or null value that the types don't allow is an error,
+/// not a silent default.
+/// </summary>
+[JsonSourceGenerationOptions(JsonSerializerDefaults.Web,
+    UseStringEnumConverter = true,
+    RespectNullableAnnotations = true,
+    RespectRequiredConstructorParameters = true)]
 [JsonSerializable(typeof(WhoAmI))]
+[JsonSerializable(typeof(SyncRequest))]
+[JsonSerializable(typeof(SyncResponse))]
 public sealed partial class ApiJson : JsonSerializerContext;

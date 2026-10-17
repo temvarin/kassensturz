@@ -71,6 +71,22 @@ public sealed class Budget
 
     public void RemovePlanned(Guid id) => Planned = Planned.Without(id);
 
+    /// <summary>What changed since <paramref name="before"/>, for the next sync.</summary>
+    public BudgetChanges ChangesSince(Budget before) => new(
+        NetSalary == before.NetSalary ? null : NetSalary,
+        ItemChanges.Between(before.Deductions, Deductions),
+        ItemChanges.Between(before.Planned, Planned));
+
+    /// <summary>Takes over changes made on another device. All or nothing: throws if any of them breaks the rules.</summary>
+    public void Apply(BudgetChanges changes)
+    {
+        var deductions = changes.Deductions.ApplyTo(Deductions, Valid);
+        var planned = changes.Planned.ApplyTo(Planned, Valid);
+        if (changes.NetSalary is { } salary) SetSalary(salary);
+        Deductions = Sorted([.. deductions.Kept, .. deductions.Added]);
+        Planned = [.. planned.Kept, .. planned.Added];
+    }
+
     public MonthOverview Overview(int year, int month, DateOnly today)
     {
         var lastDay = DateTime.DaysInMonth(year, month);

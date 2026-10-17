@@ -51,24 +51,29 @@ public sealed class KindergeldPot
     public DateOnly? NextPayment(DateOnly today) => EndDigit is { } digit ? Familienkasse.NextPayment(digit, today) : null;
 
     public Entry Receive(DateOnly date, decimal amount, string? note = null) =>
-        Add(new Entry(Guid.NewGuid(), EntryKind.Payment, date, amount, null, note.Optional()));
+        Add(new Entry(Guid.NewGuid(), EntryKind.Payment, date, amount, null, note));
 
     /// <param name="category">Blank means <see cref="DefaultCategory"/>.</param>
     public Entry Spend(DateOnly date, decimal amount, string? category, string? note = null) =>
-        Add(new Entry(Guid.NewGuid(), EntryKind.Spending, date, amount, category.Optional() ?? DefaultCategory, note.Optional()));
+        Add(new Entry(Guid.NewGuid(), EntryKind.Spending, date, amount, category, note));
 
     /// <summary>Replaces the entry with the same id, e.g. after correcting a typo.</summary>
-    public void Update(Entry entry)
-    {
-        Validate(entry);
-        Entries = Sorted(Entries.Replacing(entry with
-        {
-            Category = entry.Kind == EntryKind.Spending ? entry.Category.Optional() ?? DefaultCategory : null,
-            Note = entry.Note.Optional(),
-        }));
-    }
+    public void Update(Entry entry) => Entries = Sorted(Entries.Replacing(Valid(entry)));
 
     public void Remove(Guid id) => Entries = Entries.Without(id);
+
+    /// <summary>What changed since <paramref name="before"/>, for the next sync.</summary>
+    public KindergeldChanges ChangesSince(KindergeldPot before) => new(
+        (Children, EndDigit) == (before.Children, before.EndDigit) ? null : new KindergeldSettings(Children, EndDigit),
+        ItemChanges.Between(before.Entries, Entries));
+
+    /// <summary>Takes over changes made on another device. All or nothing: throws if any of them breaks the rules.</summary>
+    public void Apply(KindergeldChanges changes)
+    {
+        var (kept, added) = changes.Entries.ApplyTo(Entries, Valid);
+        if (changes.Settings is { } settings) Configure(settings.Children, settings.EndDigit);
+        Entries = Sorted([.. added, .. kept]); // like Add: the newest lead within a day
+    }
 
     /// <summary>Categories to suggest: the presets, then the user's own in alphabetical order.</summary>
     public IReadOnlyList<string> CategorySuggestions() =>
@@ -101,12 +106,21 @@ public sealed class KindergeldPot
 
     private Entry Add(Entry entry)
     {
-        Validate(entry);
+        entry = Valid(entry);
         Entries = Sorted([entry, .. Entries]);
         return entry;
     }
 
-    private static void Validate(Entry entry) => ArgumentOutOfRangeException.ThrowIfNegativeOrZero(entry.Amount);
+    private static Entry Valid(Entry entry)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(entry.Amount);
+        if (!Enum.IsDefined(entry.Kind)) throw new ArgumentOutOfRangeException(nameof(entry), "Unknown kind.");
+        return entry with
+        {
+            Category = entry.Kind == EntryKind.Spending ? entry.Category.Optional() ?? DefaultCategory : null,
+            Note = entry.Note.Optional(),
+        };
+    }
 
     // Stable: among entries of the same day, the one added last stays on top.
     private static IReadOnlyList<Entry> Sorted(IEnumerable<Entry> entries) => [.. entries.OrderByDescending(e => e.Date)];

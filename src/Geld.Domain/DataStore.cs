@@ -29,19 +29,20 @@ public sealed class DataStore(IKeyValueStore store)
 
     /// <summary>
     /// The contents of a backup file made today. The file records its own date, so data restored from it
-    /// counts as backed up on that day. <paramref name="data"/> itself is unchanged until the file is saved.
+    /// counts as backed up on that day. It leaves out the sync state, which belongs to this device.
+    /// <paramref name="data"/> itself is unchanged until the file is saved.
     /// </summary>
     public static string Backup(AppData data, DateOnly today)
     {
-        var previous = data.LastBackup;
-        data.LastBackup = today;
+        var (lastBackup, sync) = (data.LastBackup, data.Sync);
+        (data.LastBackup, data.Sync) = (today, null);
         try
         {
             return Serialize(data);
         }
         finally
         {
-            data.LastBackup = previous;
+            (data.LastBackup, data.Sync) = (lastBackup, sync);
         }
     }
 
