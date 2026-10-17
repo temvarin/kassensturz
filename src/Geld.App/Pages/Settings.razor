@@ -31,8 +31,15 @@
 <div class="section"><h2>Sicherung</h2></div>
 <div class="card">
     <p class="hint">
-        Deine Daten liegen nur in diesem Browser. Wird die App gelöscht oder das Handy gewechselt, sind sie weg –
-        außer du hast eine Sicherung.
+        @if (State.Data.Sync is null)
+        {
+            @:Deine Daten liegen nur in diesem Browser. Wird die App gelöscht oder das Handy gewechselt, sind sie weg –
+            @:außer du hast eine Sicherung.
+        }
+        else
+        {
+            @:Deine Daten liegen auch auf dem Server. Eine Sicherung ist deine eigene Kopie, unabhängig von Konto und Server.
+        }
     </p>
     <div class="setting">
         <span>Letzte Sicherung</span>

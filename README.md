@@ -9,7 +9,7 @@ A household money app with two parts:
 - **Kindergeld:** a pot for the children's Kindergeld that shows what came in, what was spent on what, and when the next payment arrives.
 - **Budget:** a monthly budget that shows what is left of the salary after fixed costs and planned purchases.
 
-It is an offline-capable web app (PWA) built with Blazor WebAssembly. All data stays on the phone.
+It is an offline-capable web app (PWA) built with Blazor WebAssembly. The data lives on the phone; signed in, the family's phones sync through a small server on Azure.
 
 **[Open the app →](https://kassensturz-temvarin-etcjhfhtguf4ard8.swedencentral-01.azurewebsites.net)** – and add it to your home screen to use it like an installed app ([how](#install-on-a-phone)).
 
@@ -50,32 +50,39 @@ Use the installed app rather than a browser tab. Browsers treat installed apps' 
 
 - **All logic in a plain domain library.** `Geld.Domain` computes balances, statistics, payment dates and the month overview. The Razor pages only display it and pass user input back.
 - **Encapsulated state.** State changes only through domain methods (`Receive`, `Spend`, `AddDeduction`, `Plan`), which keep the invariants: positive amounts, valid days, sorted lists. Setters are internal and exist for source-generated JSON.
-- **A versioned data contract.** The stored data and the backup file are the same JSON document with a schema number. An unknown schema is refused instead of misread, and unreadable data starts the app fresh instead of crashing it.
+- **A versioned data contract.** The stored data and the backup file are the same JSON document with a schema number. An unknown schema is refused instead of misread, and unreadable data starts the app fresh instead of crashing it. Sync requests carry a protocol number too: an outdated installed app is asked to restart instead of sending data in an old shape.
+- **Sync without lost updates.** Each phone keeps the data as the server last confirmed it, and sends only what changed since, item by item and always as the item's whole new state, so a repeated request does no harm. The server applies the changes to its latest version and saves with a version check (compare-and-set); if another phone was faster, it applies them again. Changes made while a sync is under way are put back on top of the answer. Of two edits to the same item, the one the server receives last wins; phone clocks are never trusted.
+- **The same rules on both sides.** The server checks every change with the domain code the app uses, so invalid data can't get in, even from a modified client.
+- **No passwords to leak.** GitHub deploys through OIDC, the server reaches the database with a managed identity, and Microsoft handles sign-in (Easy Auth). A members list decides who gets in, a budget's key comes from the sign-in rather than the request, and the API accepts only JSON, which another website can't send along with the user's cookie.
+- **Mistakes can be undone.** The database keeps every earlier version of a document for 6 months (a temporal table), and a tested script brings one back. The backup file stays as a copy outside the cloud.
 - **Money done right.** Amounts are `decimal` and dates are `DateOnly`. German formatting and parsing are explicit and tested, without shipping culture data.
 - **Deterministic tests.** The clock is an injected `TimeProvider`:
-  - xUnit tests the domain;
-  - bUnit renders the pages against a fake clock and in-memory storage, including the backup round trip.
+  - xUnit tests the domain, including a seeded randomised test in which three devices edit and sync in random order and must end up with exactly the server's data;
+  - bUnit renders the pages against a fake clock, in-memory storage and a fake server, including the backup round trip and the sync's timing and retries;
+  - the server runs in-process (`WebApplicationFactory`) against a real SQL Server: LocalDB on a developer's machine, a container in CI.
 - **Honest about storage.** The app asks the browser for persistent storage and reminds the user to back up, because browsers may delete a web app's data without warning.
 - **Strict build.** .NET analyzers at the recommended level, warnings are errors, trimming-safe.
 - **Accessible.** Every text colour meets WCAG AA in light and dark mode, colour is never the only signal, and motion respects *reduce motion*.
 
 ## Architecture
 
-One .NET 10 solution: a Blazor WebAssembly app on top of a domain library, hosted by a small ASP.NET Core server.
+One .NET 10 solution: a Blazor WebAssembly app and a small ASP.NET Core server, both on top of one domain library.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/architecture-dark.svg">
-  <img src="docs/diagrams/architecture-light.svg" alt="Architecture: GitHub Actions tests, publishes and deploys Geld.Server through OIDC. Geld.Server, an ASP.NET Core app on Azure App Service, serves Geld.App, a Blazor WebAssembly PWA. On the phone, the app keeps all data in localStorage as one JSON document, saves backup files through the share sheet and works offline through a service worker. All logic is in the Geld.Domain library.">
+  <img src="docs/diagrams/architecture-light.svg" alt="Architecture: all logic is in the Geld.Domain library, used by both the server and the app. On Azure in Sweden Central, Geld.Server serves the app and syncs, with Easy Auth signing users in; it stores JSON documents with 6 months of history in Azure SQL, reached with a managed identity. GitHub Actions tests and deploys it through OIDC. On the phone, Geld.App, a Blazor WebAssembly PWA, works offline through a service worker, keeps the data and its sync state in localStorage as one JSON document, exports and imports backup files, and syncs with Geld.Server.">
 </picture>
 
 - **Geld.Domain** (`src/Geld.Domain`):
   - `KindergeldPot`, `Budget`, and `Familienkasse` (the rate and the payment dates);
   - `Euro` (German amounts);
-  - `AppData` and `DataStore` (persistence with a schema version).
+  - `AppData` and `DataStore` (persistence with a schema version);
+  - the sync: the changes since the last sync, applying them, and the API's JSON.
 
   It has no UI and no I/O beyond a key-value interface, and the clock is passed in.
-- **Geld.App** (`src/Geld.App`): Razor pages and components. Services are injected: state, storage, dialogs, browser features and the clock. `browser.js` holds the two browser features without a .NET counterpart: persistent storage and the share sheet.
-- **Geld.Server** (`src/Geld.Server`): the ASP.NET Core host. It serves the app's files with Brotli compression and caching headers, and answers app routes like `/budget` with the start page.
+- **Geld.App** (`src/Geld.App`): Razor pages and components. Services are injected: state, storage, sync, dialogs, browser features and the clock. `browser.js` holds the browser features without a .NET counterpart: persistent storage, the share sheet, and noticing when the app comes back to the front. The app syncs at start, when it comes back to the front, and two seconds after a change.
+- **Geld.Server** (`src/Geld.Server`): the ASP.NET Core host. It serves the app's files with Brotli compression and caching headers, and answers app routes like `/budget` with the start page. Under `/api` it learns from Easy Auth who is signed in, lets only the members through, and syncs: one shared Kindergeld document and one budget per member, each stored whole as JSON in Azure SQL.
+- **db/**: the database schema, the app's database user (read and write only), and the restore script, run by hand in the Azure portal's query editor.
 
 ### Repository layout
 
@@ -83,12 +90,13 @@ One .NET 10 solution: a Blazor WebAssembly app on top of a domain library, hoste
 src/
   Geld.Domain/           money, Kindergeld pot, budget, payment dates, storage
   Geld.App/              Blazor WebAssembly PWA: pages, components, services
-  Geld.Server/           ASP.NET Core host for the app
+  Geld.Server/           ASP.NET Core host for the app and the sync API
+db/                      SQL scripts: schema, database user, restore
 tests/
   Geld.Domain.Tests/     xUnit
   Geld.App.Tests/        bUnit component tests
-  Geld.Server.Tests/     hosting tests (WebApplicationFactory)
-docs/                    cloud setup, screenshots and diagrams
+  Geld.Server.Tests/     API and database tests (WebApplicationFactory, SQL Server)
+docs/                    screenshots and diagrams
 ```
 
 ## Development
@@ -125,9 +133,14 @@ The Familienkasse publishes the payment dates about a year ahead, and the Kinder
 
 ## Deployment
 
-Every push to `main` runs CI (`.github/workflows/ci.yml`): tests and a Release publish of `Geld.Server`. If both pass, it is deployed to Azure App Service (Free plan). The workflow signs in to Azure with a short-lived GitHub token (OIDC), so no Azure password is stored in GitHub. Pull requests are tested but not deployed.
+Every push to `main` runs CI (`.github/workflows/ci.yml`): tests and a Release publish of `Geld.Server`. If both pass, it is deployed to Azure App Service. The workflow signs in to Azure with a short-lived GitHub token (OIDC), so no Azure password is stored in GitHub. Pull requests are tested but not deployed.
 
-The one-time setup is described step by step in [docs/cloud-setup.md](docs/cloud-setup.md).
+The Azure resources, all in Sweden Central:
+- **App Service, Free plan:** the web app, with Easy Auth for the Microsoft sign-in. Sign-in is limited to one Microsoft Entra directory, to which the second parent is invited as a guest. The app setting `Geld__Members` lists the user ids allowed to use the data.
+- **Azure SQL, Basic:** the database, with the schema from `db/`. The web app logs in with its managed identity and may only read and write the documents.
+- **Application Insights:** requests, errors and database calls, with a daily cap on the data it collects.
+
+It costs about $5 a month, all for the database: the web app's plan is free, and monitoring stays within its free amount.
 
 ## Sources
 

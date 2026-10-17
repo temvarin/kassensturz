@@ -15,7 +15,7 @@ jobs:
     permissions:
       contents: read
       # Lets the job ask GitHub for a short-lived token that Azure trusts (OIDC): no Azure password is stored here.
-      # Azure only accepts tokens for pushes to main (the federated credential in docs/cloud-setup.md).
+      # Azure only accepts tokens for pushes to main (the federated credential in Entra ID).
       id-token: write
     # A throwaway SQL Server for the tests of the database code; it exists only while this job runs.
     services:
