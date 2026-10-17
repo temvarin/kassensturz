@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using Geld.Domain;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace Geld.Server.Tests;
@@ -66,6 +67,21 @@ public class SignInTests(WebApplicationFactory<Program> factory) : IClassFixture
         var response = await Get(Server(members: ""), "/api/nothing", Member);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("Development", HttpStatusCode.OK)]
+    [InlineData("Production", HttpStatusCode.Unauthorized)]
+    public async Task The_developer_s_user_works_only_on_the_developer_s_machine(string environment, HttpStatusCode expected)
+    {
+        var server = factory.WithWebHostBuilder(host => host
+            .UseEnvironment(environment)
+            .UseSetting("Geld:DevUser", Member)
+            .UseSetting("Geld:Members", Member)).CreateClient();
+
+        var response = await Get(server, "/api/whoami", user: null);
+
+        Assert.Equal(expected, response.StatusCode);
     }
 
     [Fact]

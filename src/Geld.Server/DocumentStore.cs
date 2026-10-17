@@ -7,14 +7,29 @@ namespace Geld.Server;
 public sealed record StoredDocument(string Json, int Version);
 
 /// <summary>
-/// The synced documents in Azure SQL (db/schema.sql): <c>kindergeld</c>, shared by the family, and
-/// <c>budget:{user id}</c>, one per member. Each document is small and always read and written whole.
+/// The synced documents: <c>kindergeld</c>, shared by the family, and <c>budget:{user id}</c>, one per member. Each
+/// document is small and always read and written whole.
 /// </summary>
-public sealed class DocumentStore(string connectionString)
+public interface IDocumentStore
 {
-    // The free database pauses when idle, and the first connection fails while it wakes up, which takes up to about a
-    // minute. SqlClient retries opening on such errors (40613 "database not currently available" among them).
-    private static readonly SqlRetryLogicBaseProvider WakeUp = SqlConfigurableRetryFactory.CreateFixedRetryProvider(
+    Task<StoredDocument?> GetAsync(string id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Saves the document, but only if it is still at <paramref name="expectedVersion"/>, the version the change is
+    /// based on (0: the document doesn't exist yet). That way two phones writing at the same time can't overwrite each
+    /// other's change unnoticed (a lost update).
+    /// </summary>
+    /// <returns>false if someone else saved first: load the document again, apply the change to it, and retry.</returns>
+    Task<bool> TrySaveAsync(string id, string json, int expectedVersion, CancellationToken cancellationToken = default);
+}
+
+/// <summary>The documents in Azure SQL (db/schema.sql).</summary>
+public sealed class DocumentStore(string connectionString) : IDocumentStore
+{
+    // Azure SQL is unavailable for moments now and then (maintenance, failover; a serverless database also for up to a
+    // minute while it wakes from a pause). SqlClient retries opening on such errors (40613 "database not currently
+    // available" among them).
+    private static readonly SqlRetryLogicBaseProvider Retry = SqlConfigurableRetryFactory.CreateFixedRetryProvider(
         new SqlRetryLogicOption { NumberOfTries = 8, DeltaTime = TimeSpan.FromSeconds(10) });
 
     public async Task<StoredDocument?> GetAsync(string id, CancellationToken cancellationToken = default)
@@ -25,12 +40,6 @@ public sealed class DocumentStore(string connectionString)
         return await reader.ReadAsync(cancellationToken) ? new StoredDocument(reader.GetString(0), reader.GetInt32(1)) : null;
     }
 
-    /// <summary>
-    /// Saves the document, but only if it is still at <paramref name="expectedVersion"/>, the version the change is
-    /// based on (0: the document doesn't exist yet). That way two phones writing at the same time can't overwrite each
-    /// other's change unnoticed (a lost update).
-    /// </summary>
-    /// <returns>false if someone else saved first: load the document again, apply the change to it, and retry.</returns>
     public async Task<bool> TrySaveAsync(string id, string json, int expectedVersion, CancellationToken cancellationToken = default)
     {
         await using var connection = await OpenAsync(cancellationToken);
@@ -51,7 +60,7 @@ public sealed class DocumentStore(string connectionString)
 
     private async Task<SqlConnection> OpenAsync(CancellationToken cancellationToken)
     {
-        var connection = new SqlConnection(connectionString) { RetryLogicProvider = WakeUp };
+        var connection = new SqlConnection(connectionString) { RetryLogicProvider = Retry };
         try
         {
             await connection.OpenAsync(cancellationToken);

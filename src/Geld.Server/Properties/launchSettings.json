@@ -7,7 +7,10 @@
       "launchBrowser": false,
       "applicationUrl": "http://localhost:8082",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "Geld__DevUser": "dev",
+        "Geld__Members": "dev",
+        "ConnectionStrings__Geld": "Server=(localdb)\\MSSQLLocalDB;Database=Kassensturz;Integrated Security=true"
       }
     }
   }
