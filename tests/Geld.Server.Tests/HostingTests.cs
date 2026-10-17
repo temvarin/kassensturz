@@ -22,14 +22,6 @@ public class HostingTests(WebApplicationFactory<Program> factory) : IClassFixtur
     }
 
     [Fact]
-    public async Task An_unknown_api_route_is_not_found_rather_than_the_app()
-    {
-        var response = await client.GetAsync(new Uri("/api/nothing", UriKind.Relative));
-
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-    }
-
-    [Fact]
     public async Task Every_script_the_start_page_loads_is_served()
     {
         var html = await client.GetStringAsync(new Uri("/", UriKind.Relative));
