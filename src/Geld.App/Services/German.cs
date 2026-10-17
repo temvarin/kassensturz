@@ -30,5 +30,14 @@ public static class German
         var days => $"vor {-days} Tagen",
     };
 
+    /// <summary>"gerade eben", "vor 5 Min.", "vor 3 Std." – and from a day back on as <see cref="Relative"/>.</summary>
+    public static string Ago(this TimeProvider clock, DateTimeOffset time) => (clock.GetUtcNow() - time) switch
+    {
+        { TotalMinutes: < 1 } => "gerade eben",
+        { TotalHours: < 1 } and var span => $"vor {(int)span.TotalMinutes} Min.",
+        { TotalDays: < 1 } and var span => $"vor {(int)span.TotalHours} Std.",
+        _ => Relative(DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(time, clock.LocalTimeZone).DateTime), clock.Today()),
+    };
+
     public static DateOnly Today(this TimeProvider clock) => DateOnly.FromDateTime(clock.GetLocalNow().DateTime);
 }

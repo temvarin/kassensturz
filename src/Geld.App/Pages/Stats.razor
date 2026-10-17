@@ -1,5 +1,5 @@
 @page "/statistik"
-@inject AppState State
+@inherits DataPage
 @inject TimeProvider Clock
 
 <TopBar Title="Statistik" Kicker="Kindergeld" />
@@ -77,6 +77,11 @@
     protected override void OnInitialized()
     {
         today = Clock.Today();
+        OnDataChanged();
+    }
+
+    protected override void OnDataChanged()
+    {
         Show(period);
         // Newest first, from the first month with an entry: a new pot shouldn't show a year of empty rows.
         monthly = [.. Pot.MonthlyTotals(today, 12).SkipWhile(m => m.In == 0 && m.Out == 0).Reverse()];

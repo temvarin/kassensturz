@@ -1,5 +1,5 @@
 @page "/budget"
-@inject AppState State
+@inherits DataPage
 @inject TimeProvider Clock
 
 <TopBar Title="Budget" Kicker="@(Budget.NetSalary > 0 ? $"Netto {Euro.Format(Budget.NetSalary)}" : "Monatsbudget")" />
@@ -140,6 +140,8 @@
         today = Clock.Today();
         Refresh();
     }
+
+    protected override void OnDataChanged() => Refresh();
 
     private void Go(int months)
     {

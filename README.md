@@ -36,7 +36,8 @@ The salary has a different question: what can still be spent this month? Rent, s
   - Debited costs are struck through and the next one is marked.
   - Later months can be planned ahead.
 - **Backups:** a backup file is saved through the phone's share sheet (Files, iCloud Drive, Google Drive) and can be loaded again on any device. A reminder appears when no backup was made in the last 30 days.
-- **Works offline**, installs to the home screen on iPhone and Android, and follows the phone's dark mode. No account, no tracking, and no data on any server.
+- **Sync between the family's phones:** signed in with Microsoft, both parents share one Kindergeld pot, and each budget stays private. Changes made offline go out with the next sync. Without signing in, nothing leaves the phone.
+- **Works offline**, installs to the home screen on iPhone and Android, and follows the phone's dark mode. No tracking.
 
 ## Install on a phone
 
@@ -100,12 +101,19 @@ dotnet workload install wasm-tools
 
 ```bash
 dotnet run --project src/Geld.App      # http://localhost:8081, the app alone
-dotnet run --project src/Geld.Server   # http://localhost:8082, the app as hosted in production
+dotnet run --project src/Geld.Server   # http://localhost:8082, the app with the server's API
 dotnet test
 dotnet publish src/Geld.Server -c Release -o publish
 ```
 
 The service worker only caches in the published app; in development every request goes to the server.
+
+On the developer's machine there is no Microsoft sign-in: `Geld.Server` signs every request in as the user `dev` (see `Properties/launchSettings.json`, Development only) and syncs with a database on SQL Server LocalDB. The tests use LocalDB too, with a fresh database each run. Create the development database once:
+
+```bash
+sqlcmd -S "(localdb)\MSSQLLocalDB" -Q "CREATE DATABASE Kassensturz"
+sqlcmd -S "(localdb)\MSSQLLocalDB" -d Kassensturz -i db/schema.sql
+```
 
 ### Updating yearly data
 

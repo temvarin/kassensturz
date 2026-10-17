@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http.Json;
 using Geld.App.Components;
 using Geld.Domain;
 using Microsoft.AspNetCore.Components;
@@ -10,9 +9,6 @@ namespace Geld.App.Tests;
 public class AccountTests : AppTestContext
 {
     private string Address => Services.GetRequiredService<NavigationManager>().Uri;
-
-    private static HttpResponseMessage SignedIn(bool member) =>
-        new(HttpStatusCode.OK) { Content = JsonContent.Create(new WhoAmI("8a1c0e52", "anna@example.com", member), ApiJson.Default.WhoAmI) };
 
     [Fact]
     public void Signed_out_it_offers_the_Microsoft_sign_in_which_returns_to_the_settings()
@@ -28,7 +24,7 @@ public class AccountTests : AppTestContext
     [Fact]
     public void A_member_sees_their_account_and_can_sign_out()
     {
-        Server = _ => SignedIn(member: true);
+        Server.User = FakeServer.Anna;
         var card = Render<AccountCard>();
         card.WaitForAssertion(() => Assert.Equal("anna@example.com", card.Find(".account").TextContent));
         Assert.Empty(card.FindAll("code"));
@@ -39,12 +35,15 @@ public class AccountTests : AppTestContext
     }
 
     [Fact]
-    public void Someone_not_yet_on_the_members_list_sees_the_id_to_send_in()
+    public void Someone_not_yet_on_the_members_list_sees_the_id_to_send_in_and_nothing_is_synced()
     {
-        Server = _ => SignedIn(member: false);
+        Server.User = FakeServer.Anna with { Member = false };
+        Data.Kindergeld.Receive(Today, 518);
         var card = Render<AccountCard>();
 
         card.WaitForAssertion(() => Assert.Equal("8a1c0e52", card.Find("code").TextContent));
+        Assert.Empty(Server.Syncs);
+        Assert.Empty(card.FindAll(".sync"));
     }
 
     [Theory]
@@ -53,7 +52,7 @@ public class AccountTests : AppTestContext
     [InlineData("no api")] // the development server answers every path with the app
     public void Without_the_server_it_says_so(string problem)
     {
-        Server = _ => problem switch
+        Server.Override = _ => problem switch
         {
             "offline" => throw new HttpRequestException("offline"),
             "error" => new HttpResponseMessage(HttpStatusCode.InternalServerError),

@@ -1,5 +1,5 @@
 @page "/"
-@inject AppState State
+@inherits DataPage
 @inject TimeProvider Clock
 
 <TopBar Title="Kindergeld" Kicker="@Kicker" />
@@ -99,7 +99,9 @@ else
 
     private void Save(EntrySheet.Result r)
     {
-        if (editing is not null) Pot.Update(editing with { Date = r.Date, Amount = r.Amount, Category = r.Category, Note = r.Note });
+        // The entry may have been deleted on another phone while the sheet was open: then it comes back as a new one.
+        if (editing is not null && Pot.Entries.Any(e => e.Id == editing.Id))
+            Pot.Update(editing with { Date = r.Date, Amount = r.Amount, Category = r.Category, Note = r.Note });
         else if (sheetKind == EntryKind.Payment) Pot.Receive(r.Date, r.Amount, r.Note);
         else Pot.Spend(r.Date, r.Amount, r.Category, r.Note);
         State.Save();

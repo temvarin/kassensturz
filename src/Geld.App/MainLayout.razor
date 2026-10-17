@@ -1,5 +1,6 @@
 @inherits LayoutComponentBase
 @inject Browser Browser
+@inject SyncService Sync
 
 <header class="topbar">
     <SectionOutlet SectionName="@TopBar.Section" />
@@ -13,6 +14,8 @@
 @code {
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender) await Browser.ProtectStorageAsync();
+        if (!firstRender) return;
+        await Browser.ProtectStorageAsync();
+        await Sync.StartAsync();
     }
 }

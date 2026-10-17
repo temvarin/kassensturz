@@ -1,67 +1,91 @@
-@* The account on this device. Signing in happens outside the app, at App Service's Easy Auth. *@
-@using System.Net
-@using System.Net.Http.Json
-@using System.Text.Json
-@inject HttpClient Http
+@* The account on this device and the sync with it. Signing in happens outside the app, at App Service's Easy Auth. *@
+@implements IDisposable
+@inject SyncService Sync
+@inject AppState State
+@inject TimeProvider Clock
 @inject NavigationManager Navigation
+@inject Dialogs Dialogs
 
 <div class="section"><h2>Konto</h2></div>
 <div class="card">
-    <p class="hint">
-        Mit einem Konto teilt ihr bald den Kindergeld-Topf zwischen euren Handys. Noch bleiben alle Daten nur auf diesem
-        Gerät.
-    </p>
+    <p class="hint">Angemeldet teilt ihr den Kindergeld-Topf zwischen euren Handys. Das Budget bleibt bei jedem für sich.</p>
     <div class="setting">
         <span>Angemeldet</span>
-        <b class="account">@(status switch
+        <b class="account">@(Sync.Status switch
         {
-            Status.SignedIn => me!.Name,
-            Status.SignedOut => "nein",
-            Status.Unreachable => "Server nicht erreichbar",
-            _ => "…",
+            SyncStatus.Checking => "…",
+            SyncStatus.Unreachable => "Server nicht erreichbar",
+            _ => Sync.Me?.Name ?? "nein",
         })</b>
     </div>
-    @if (me is { Member: false })
+    @if (Sync.CanSync || Sync.Status == SyncStatus.Outdated)
     {
-        <p class="hint">Noch nicht freigeschaltet. Deine Nutzer-ID: <code>@me.Id</code></p>
+        <div class="setting">
+            <span>Synchronisiert</span>
+            <b class="sync">@(Sync.Status switch
+            {
+                SyncStatus.Syncing => "läuft …",
+                SyncStatus.Failed => "fehlgeschlagen",
+                SyncStatus.Outdated => "Bitte App neu laden",
+                _ => State.Data.Sync is { } last ? Clock.Ago(last.LastSync) : "noch nie",
+            })</b>
+        </div>
     }
-    @if (status == Status.SignedOut)
+    @switch (Sync.Status)
+    {
+        case SyncStatus.NotMember:
+            <p class="hint">Noch nicht freigeschaltet. Deine Nutzer-ID: <code>@Sync.Me?.Id</code></p>
+            break;
+        case SyncStatus.OtherAccount:
+            <p class="hint">
+                Die Daten auf diesem Gerät gehören zu einem anderen Konto. Um mit diesem zu synchronisieren, setz das Gerät
+                zurück; was das andere Konto auf dem Server hat, bleibt dort.
+            </p>
+            <button class="btn danger" @onclick="Reset">Daten auf diesem Gerät zurücksetzen</button>
+            break;
+        case SyncStatus.Failed:
+            <p class="hint">Der Server antwortet gerade nicht. Deine Änderungen bleiben hier und gehen mit der nächsten Synchronisierung mit.</p>
+            break;
+        case SyncStatus.Outdated:
+            <p class="hint">Es gibt eine neue Version. Schließ die App ganz und öffne sie wieder, dann geht es weiter.</p>
+            break;
+    }
+    @if (Sync.CanSync)
+    {
+        <button class="btn primary" disabled="@(Sync.Status == SyncStatus.Syncing)" @onclick="Sync.SyncNowAsync">Jetzt synchronisieren</button>
+    }
+    @if (Sync.Status == SyncStatus.SignedOut)
     {
         <button class="btn primary" @onclick="SignIn">Mit Microsoft anmelden</button>
     }
-    else if (status == Status.SignedIn)
+    else if (Sync.Me is not null)
     {
         <button class="btn" @onclick="SignOut">Abmelden</button>
     }
 </div>
 
 @code {
-    private enum Status { Checking, SignedOut, SignedIn, Unreachable }
-
-    private Status status;
-    private WhoAmI? me;
-
     protected override async Task OnInitializedAsync()
     {
-        try
+        Sync.Changed += OnChanged;
+        await Sync.StartAsync(); // already done if the app started with it
+    }
+
+    public void Dispose() => Sync.Changed -= OnChanged;
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private async Task Reset()
+    {
+        if (await Dialogs.Confirm("Alle Daten auf diesem Gerät löschen? Was auf dem Server liegt, bleibt.",
+                ok: "Zurücksetzen", cancel: "Abbrechen", danger: true))
         {
-            using var response = await Http.GetAsync(new Uri("api/whoami", UriKind.Relative));
-            if (response.StatusCode == HttpStatusCode.Unauthorized)
-            {
-                status = Status.SignedOut;
-                return;
-            }
-            response.EnsureSuccessStatusCode();
-            me = await response.Content.ReadFromJsonAsync(ApiJson.Default.WhoAmI);
-            status = me is null ? Status.Unreachable : Status.SignedIn;
-        }
-        catch (Exception e) when (e is HttpRequestException or JsonException)
-        {
-            status = Status.Unreachable; // offline, or a server without the API (the development server)
+            await Sync.ResetAsync();
         }
     }
 
-    // Easy Auth's pages, not the app's: a full page load takes the user there and back to the settings.
+    // Easy Auth's pages, not the app's: a full page load takes the user there and back to the settings. Signing out
+    // keeps the data and its sync state on this device.
     private void SignIn() => Navigation.NavigateTo("/.auth/login/aad?post_login_redirect_uri=/einstellungen", forceLoad: true);
 
     private void SignOut() => Navigation.NavigateTo("/.auth/logout?post_logout_redirect_uri=/einstellungen", forceLoad: true);
