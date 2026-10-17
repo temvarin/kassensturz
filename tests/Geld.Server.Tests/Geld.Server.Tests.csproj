@@ -16,6 +16,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The tests run the real scripts. -->
+    <None Include="..\..\db\*.sql" LinkBase="db" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Geld.Server\Geld.Server.csproj" />
   </ItemGroup>
 

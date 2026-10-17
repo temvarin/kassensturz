@@ -17,6 +17,9 @@ builder.Services.AddOptions<AuthorizationOptions>().Configure<IConfiguration>((o
     options.AddPolicy(Member, policy => policy.RequireAssertion(context =>
         members.Contains(context.User.FindFirstValue(ClaimTypes.NameIdentifier))));
 });
+// Azure SQL; the connection string has no password: the Web App logs in with its managed identity.
+builder.Services.AddSingleton(services => new DocumentStore(services.GetRequiredService<IConfiguration>().GetConnectionString("Geld")
+    ?? throw new InvalidOperationException("The connection string Geld is missing.")));
 var app = builder.Build();
 
 // The Blazor app's files, served with their pre-compressed variants and caching headers.
@@ -31,6 +34,10 @@ app.MapGet("/api/whoami", async (ClaimsPrincipal user, IAuthorizationService aut
 // Everything else under /api is for members only, including endpoints added later: Easy Auth lets everyone through
 // to this app (which must load without signing in), so this is the gate.
 var api = app.MapGroup("/api").RequireAuthorization(Member);
+// Shows that the database answers (after a pause it takes up to a minute to wake up), and how often the shared pot has
+// been saved.
+api.MapGet("/status", async (DocumentStore documents, CancellationToken cancellationToken) =>
+    new { KindergeldVersion = (await documents.GetAsync("kindergeld", cancellationToken))?.Version });
 // Unknown API routes are errors, not app pages.
 api.Map("{**path}", () => Results.NotFound());
 
