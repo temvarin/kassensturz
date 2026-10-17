@@ -224,7 +224,10 @@ small { display: block; font-weight: 400; font-size: 14px; color: var(--muted); 
 .stepper .icon-btn { margin: 0; border: 2px solid var(--ink); border-radius: var(--radius); background: var(--surface); }
 .stepper .icon-btn:disabled { border-color: var(--faded-line); color: var(--faded); cursor: default; }
 .setting select { min-height: 44px; min-width: 5em; padding: 6px 10px; border: 2px solid var(--ink); border-radius: var(--radius); background: var(--surface); }
-.card .setting + .btn { margin-top: 16px; }
+.card .setting + .btn, .card .hint + .btn { margin-top: 16px; }
+/* An email address or user id may break anywhere; one tap selects the id for copying. */
+.account { min-width: 0; overflow-wrap: anywhere; text-align: right; }
+.hint code { overflow-wrap: anywhere; user-select: all; }
 .card .btn + .btn { margin-top: 14px; }
 
 /* Forms */

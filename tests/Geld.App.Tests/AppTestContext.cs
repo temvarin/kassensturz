@@ -1,3 +1,4 @@
+using System.Net;
 using AngleSharp.Dom;
 using Geld.App.Services;
 using Geld.Domain;
@@ -21,7 +22,11 @@ public abstract class AppTestContext : BunitContext
         Services.AddAppServices();
         Services.AddSingleton<IKeyValueStore, MemoryStore>();
         Services.AddSingleton<TimeProvider>(Clock);
+        Services.AddSingleton(new HttpClient(new StubServer(request => Server(request))) { BaseAddress = new Uri("http://localhost/") });
     }
+
+    /// <summary>Answers the app's requests to the server. Unless a test says otherwise, nobody is signed in.</summary>
+    protected Func<HttpRequestMessage, HttpResponseMessage> Server { get; set; } = _ => new HttpResponseMessage(HttpStatusCode.Unauthorized);
 
     protected AppData Data => Services.GetRequiredService<AppState>().Data;
     protected Dialogs Dialogs => Services.GetRequiredService<Dialogs>();
@@ -32,6 +37,12 @@ public abstract class AppTestContext : BunitContext
     /// <summary>The button with this text or accessible label.</summary>
     protected static IElement Button<T>(IRenderedComponent<T> cut, string text) where T : IComponent =>
         cut.FindAll("button").Single(b => b.TextContent.Trim() == text || b.GetAttribute("aria-label") == text);
+
+    private sealed class StubServer(Func<HttpRequestMessage, HttpResponseMessage> answer) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(answer(request));
+    }
 
     private sealed class MemoryStore : IKeyValueStore
     {

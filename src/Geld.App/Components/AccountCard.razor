@@ -1,0 +1,68 @@
+@* The account on this device. Signing in happens outside the app, at App Service's Easy Auth. *@
+@using System.Net
+@using System.Net.Http.Json
+@using System.Text.Json
+@inject HttpClient Http
+@inject NavigationManager Navigation
+
+<div class="section"><h2>Konto</h2></div>
+<div class="card">
+    <p class="hint">
+        Mit einem Konto teilt ihr bald den Kindergeld-Topf zwischen euren Handys. Noch bleiben alle Daten nur auf diesem
+        Gerät.
+    </p>
+    <div class="setting">
+        <span>Angemeldet</span>
+        <b class="account">@(status switch
+        {
+            Status.SignedIn => me!.Name,
+            Status.SignedOut => "nein",
+            Status.Unreachable => "Server nicht erreichbar",
+            _ => "…",
+        })</b>
+    </div>
+    @if (me is { Member: false })
+    {
+        <p class="hint">Noch nicht freigeschaltet. Deine Nutzer-ID: <code>@me.Id</code></p>
+    }
+    @if (status == Status.SignedOut)
+    {
+        <button class="btn primary" @onclick="SignIn">Mit Microsoft anmelden</button>
+    }
+    else if (status == Status.SignedIn)
+    {
+        <button class="btn" @onclick="SignOut">Abmelden</button>
+    }
+</div>
+
+@code {
+    private enum Status { Checking, SignedOut, SignedIn, Unreachable }
+
+    private Status status;
+    private WhoAmI? me;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            using var response = await Http.GetAsync(new Uri("api/whoami", UriKind.Relative));
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                status = Status.SignedOut;
+                return;
+            }
+            response.EnsureSuccessStatusCode();
+            me = await response.Content.ReadFromJsonAsync(ApiJson.Default.WhoAmI);
+            status = me is null ? Status.Unreachable : Status.SignedIn;
+        }
+        catch (Exception e) when (e is HttpRequestException or JsonException)
+        {
+            status = Status.Unreachable; // offline, or a server without the API (the development server)
+        }
+    }
+
+    // Easy Auth's pages, not the app's: a full page load takes the user there and back to the settings.
+    private void SignIn() => Navigation.NavigateTo("/.auth/login/aad?post_login_redirect_uri=/einstellungen", forceLoad: true);
+
+    private void SignOut() => Navigation.NavigateTo("/.auth/logout?post_logout_redirect_uri=/einstellungen", forceLoad: true);
+}

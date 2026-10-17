@@ -35,10 +35,10 @@ async function onFetch(event) {
   let cachedResponse = null;
   if (event.request.method === 'GET') {
     // Pages of the app (e.g. /budget after a reload) are all served by index.html. Sign-in and sign-out under
-    // /.auth/ are handled by the hosting platform, so those navigations must reach the network.
+    // /.auth/ are handled by the hosting platform and /api/ by the server, so those navigations must reach the network.
     const shouldServeIndexHtml = event.request.mode === 'navigate'
       && !manifestUrlList.some(url => url === event.request.url)
-      && !new URL(event.request.url).pathname.startsWith('/.auth/');
+      && !/^\/(\.auth|api)\//.test(new URL(event.request.url).pathname);
     const request = shouldServeIndexHtml ? new URL('index.html', baseUrl).href : event.request;
     const cache = await caches.open(cacheName);
     cachedResponse = await cache.match(request);
