@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.SqlClient;
@@ -66,6 +67,16 @@ public class DocumentStoreTests(SqlDatabase database) : IClassFixture<SqlDatabas
 
         Assert.Equal(1, restored);
         Assert.Equal(new StoredDocument("""{"entries":["Oktober","November"]}""", 3), await store.GetAsync(id));
+    }
+
+    [Fact]
+    public void The_published_server_keeps_the_culture_data_the_database_driver_needs()
+    {
+        // These tests run the server inside the test process, which has its own settings; the server's own, as
+        // App Service starts it, are in its runtimeconfig.json.
+        var settings = JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Geld.Server.runtimeconfig.json")));
+
+        Assert.NotEqual(true, settings?["runtimeOptions"]?["configProperties"]?["System.Globalization.Invariant"]?.GetValue<bool>());
     }
 
     [Fact]
