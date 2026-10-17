@@ -35,7 +35,7 @@ public enum SyncStatus
 
 /// <summary>
 /// Keeps the data on this device in step with the server: sends what changed here, takes what changed elsewhere.
-/// Syncs at start when there are changes or the last sync is <see cref="Interval"/> old, and shortly after each save.
+/// Syncs at start, when the app comes back to the front, and shortly after each save.
 /// Only one sync runs at a time, so answers can't arrive out of order and bring back older data.
 /// </summary>
 public sealed class SyncService(AppState state, HttpClient http, TimeProvider clock)
@@ -43,8 +43,8 @@ public sealed class SyncService(AppState state, HttpClient http, TimeProvider cl
     /// <summary>A save is sent this long after it, so that a few quick changes go together.</summary>
     public static readonly TimeSpan AfterSave = TimeSpan.FromSeconds(2);
 
-    /// <summary>How long the other phone's changes may take to show up here when nothing changes on this one.</summary>
-    public static readonly TimeSpan Interval = TimeSpan.FromHours(12);
+    /// <summary>Coming back to the app within this time of the last sync doesn't sync again, e.g. when switching apps.</summary>
+    public static readonly TimeSpan Recent = TimeSpan.FromMinutes(1);
 
     /// <summary>A failed sync is tried once more after this; never more often, so a struggling server isn't flooded.</summary>
     public static readonly TimeSpan RetryAfter = TimeSpan.FromSeconds(30);
@@ -68,8 +68,19 @@ public sealed class SyncService(AppState state, HttpClient http, TimeProvider cl
         started = true;
         state.Changed += OnSaved;
         await CheckAccountAsync();
-        if (state.Data.HasUnsyncedChanges || state.Data.Sync is not { } sync || clock.GetUtcNow() - sync.LastSync >= Interval)
-            await SyncAsync();
+        await SyncAsync();
+    }
+
+    /// <summary>
+    /// When the app comes back to the front. A phone rarely starts an installed app anew: it keeps it in memory and
+    /// brings it back, so this is when the other phone's changes are fetched.
+    /// </summary>
+    public async Task ResumeAsync()
+    {
+        if (!started || running) return;
+        if (Status == SyncStatus.Unreachable) await CheckAccountAsync(); // opened offline, maybe online now
+        if (state.Data.Sync is { } sync && clock.GetUtcNow() - sync.LastSync < Recent) return;
+        await SyncAsync();
     }
 
     /// <summary>"Jetzt synchronisieren".</summary>

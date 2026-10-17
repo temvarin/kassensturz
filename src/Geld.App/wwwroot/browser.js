@@ -24,4 +24,11 @@ window.geld = {
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
     return true;
   },
+
+  // Also when the user returns to the installed app, which the phone kept in memory instead of starting it anew.
+  whenVisible(browser) {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') browser.invokeMethodAsync('OnVisible');
+    });
+  },
 };

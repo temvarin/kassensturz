@@ -52,18 +52,31 @@ public class SyncTests : AppTestContext
     }
 
     [Fact]
-    public async Task At_start_without_changes_it_syncs_only_when_the_last_sync_is_12_hours_old()
+    public async Task Coming_back_to_the_app_fetches_the_other_phone_s_changes_unless_it_just_did()
     {
         Started();
-        var http = Services.GetRequiredService<HttpClient>();
+        var theirs = Server.Kindergeld.Receive(Today, 518); // meanwhile, on the other phone
 
-        Clock.Advance(SyncService.Interval - TimeSpan.FromMinutes(1));
-        await new SyncService(State, http, Clock).StartAsync(); // the app started again
+        Clock.Advance(SyncService.Recent - TimeSpan.FromSeconds(1));
+        await Sync.ResumeAsync();
         Assert.Single(Server.Syncs);
 
-        Clock.Advance(TimeSpan.FromMinutes(1));
-        await new SyncService(State, http, Clock).StartAsync();
-        Assert.Equal(2, Server.Syncs.Count);
+        Clock.Advance(TimeSpan.FromSeconds(1));
+        await Sync.ResumeAsync();
+        Assert.Equal([theirs], Data.Kindergeld.Entries);
+    }
+
+    [Fact]
+    public async Task An_app_opened_offline_syncs_when_it_comes_back_online()
+    {
+        Server.Override = _ => throw new HttpRequestException("offline");
+        var card = Render<AccountCard>();
+        card.WaitForAssertion(() => Assert.Equal("Server nicht erreichbar", card.Find(".account").TextContent));
+
+        Server.Override = null;
+        await Sync.ResumeAsync();
+
+        card.WaitForAssertion(() => Assert.Equal("gerade eben", card.Find(".sync").TextContent));
     }
 
     [Fact]

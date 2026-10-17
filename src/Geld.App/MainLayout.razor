@@ -16,6 +16,7 @@
     {
         if (!firstRender) return;
         await Browser.ProtectStorageAsync();
+        await Browser.WhenVisibleAsync(Sync.ResumeAsync);
         await Sync.StartAsync();
     }
 }
