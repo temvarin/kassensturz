@@ -1,3 +1,7 @@
+// Offline support: the service worker keeps a copy of the app (service-worker.published.js). Registered here rather
+// than in an inline script in index.html, which the server's Content Security Policy doesn't allow.
+navigator.serviceWorker?.register('service-worker.js', { updateViaCache: 'none' });
+
 // Browser features the app calls from .NET (Services/Browser.cs).
 window.geld = {
   // Browsers may delete a site's storage when the device runs low on space, unless the site is marked persistent.

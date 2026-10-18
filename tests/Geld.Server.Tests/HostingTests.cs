@@ -35,6 +35,37 @@ public class HostingTests(WebApplicationFactory<Program> factory) : IClassFixtur
         }
     }
 
+    [Theory]
+    [InlineData("/")]
+    [InlineData("/styles.css")]
+    [InlineData("/api/whoami")]
+    public async Task Every_answer_tells_the_browser_to_run_only_this_site_s_code_and_never_in_a_frame(string path)
+    {
+        var response = await client.GetAsync(new Uri(path, UriKind.Relative));
+        var policy = response.Headers.GetValues("Content-Security-Policy").Single();
+
+        Assert.Contains("script-src 'self' 'wasm-unsafe-eval';", policy, StringComparison.Ordinal);
+        Assert.Contains("frame-ancestors 'none'", policy, StringComparison.Ordinal);
+        Assert.Equal("nosniff", response.Headers.GetValues("X-Content-Type-Options").Single());
+        Assert.Equal("DENY", response.Headers.GetValues("X-Frame-Options").Single());
+    }
+
+    [Fact]
+    public async Task The_start_page_has_no_inline_script_which_the_policy_would_block()
+    {
+        var html = await client.GetStringAsync(new Uri("/", UriKind.Relative));
+
+        Assert.DoesNotMatch("<script(?![^>]*src=)", html);
+    }
+
+    [Fact]
+    public async Task Answers_of_the_api_are_never_stored_in_a_cache()
+    {
+        var response = await client.GetAsync(new Uri("/api/whoami", UriKind.Relative));
+
+        Assert.True(response.Headers.CacheControl?.NoStore);
+    }
+
     [Fact]
     public async Task The_app_files_are_served()
     {
