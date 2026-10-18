@@ -165,6 +165,7 @@ small { display: block; font-weight: 400; font-size: 14px; color: var(--muted); 
 /* Reminder to back up */
 .banner { display: flex; align-items: center; gap: 10px; padding: 10px 14px; margin-bottom: 16px; font-size: 15px; font-weight: 700; text-decoration: none; background: var(--gold); color: var(--on-gold); }
 .banner span { flex: 1; }
+button.banner { width: 100%; font-family: inherit; text-align: left; cursor: pointer; }
 
 /* Section headings with an action */
 .section { display: flex; align-items: center; gap: 10px; margin: 8px 0 10px; }

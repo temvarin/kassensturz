@@ -1,0 +1,27 @@
+@* Shown when a phone that syncs has been signed out, e.g. when the session expired: until the user signs in again,
+   changes stay on this phone. A phone that never synced uses the app without an account, which is nothing to warn about. *@
+@implements IDisposable
+@inject SyncService Sync
+@inject AppState State
+@inject NavigationManager Navigation
+
+@if (Sync.Status == SyncStatus.SignedOut && State.Data.Sync is not null)
+{
+    <button class="banner" @onclick="SignIn">
+        <Icon Name="cloud-off" />
+        <span>Abgemeldet – Änderungen werden nicht synchronisiert. Anmelden</span>
+        <Icon Name="chevron-right" />
+    </button>
+}
+
+@code {
+    protected override void OnInitialized() => Sync.Changed += OnChanged;
+
+    public void Dispose() => Sync.Changed -= OnChanged;
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    // Easy Auth's page, not the app's: a full page load takes the user there and back to this page.
+    private void SignIn() => Navigation.NavigateTo(
+        $"/.auth/login/aad?post_login_redirect_uri=/{Navigation.ToBaseRelativePath(Navigation.Uri)}", forceLoad: true);
+}

@@ -3,6 +3,7 @@ using Geld.App.Components;
 using Geld.App.Pages;
 using Geld.App.Services;
 using Geld.Domain;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Geld.App.Tests;
@@ -13,6 +14,7 @@ public class SyncTests : AppTestContext
 
     private AppState State => Services.GetRequiredService<AppState>();
     private SyncService Sync => Services.GetRequiredService<SyncService>();
+    private NavigationManager Navigation => Services.GetRequiredService<NavigationManager>();
 
     /// <summary>The account card, once the sync at start has finished.</summary>
     private IRenderedComponent<AccountCard> Started(string status = "gerade eben")
@@ -169,6 +171,37 @@ public class SyncTests : AppTestContext
         Assert.Equal([annas], Stored.Kindergeld.Entries);
         Assert.Equal(FakeServer.Anna.Id, Stored.Sync?.UserId);
         Assert.Equal([annas], Server.Kindergeld.Entries);
+    }
+
+    [Fact]
+    public void A_phone_that_synced_before_and_is_signed_out_now_says_so_on_its_pages_and_signs_in_from_there()
+    {
+        Started();
+        Server.User = null; // the session has expired
+        Navigation.NavigateTo("budget");
+        var page = Render<MonthBudget>();
+        Assert.Empty(page.FindAll("button.banner"));
+
+        Data.Kindergeld.Receive(Today, 518);
+        State.Save();
+        Clock.Advance(SyncService.AfterSave);
+        page.WaitForAssertion(() => Assert.Contains("nicht synchronisiert", page.Find("button.banner").TextContent));
+        page.Find("button.banner").Click();
+
+        Assert.Equal("http://localhost/.auth/login/aad?post_login_redirect_uri=/budget",
+            Navigation.Uri);
+    }
+
+    [Fact]
+    public async Task Without_ever_having_synced_being_signed_out_is_nothing_to_warn_about()
+    {
+        Server.User = null;
+        var page = Render<Home>();
+
+        await Sync.StartAsync();
+
+        Assert.Equal(SyncStatus.SignedOut, Sync.Status);
+        Assert.Empty(page.FindAll("button.banner"));
     }
 
     [Fact]
