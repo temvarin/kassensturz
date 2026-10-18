@@ -21,6 +21,9 @@ public sealed class FakeServer
     /// <summary>Answers for the next sync requests, instead of syncing (e.g. an error).</summary>
     public Queue<Func<HttpResponseMessage>> Next { get; } = [];
 
+    /// <summary>The next sync is saved, but its answer gets lost on the way back.</summary>
+    public bool LoseNextAnswer { get; set; }
+
     /// <summary>While set, sync requests wait until it completes: a slow network.</summary>
     public TaskCompletionSource? Hold { get; set; }
 
@@ -47,6 +50,11 @@ public sealed class FakeServer
                 var budget = Budgets.TryGetValue(User.Id, out var b) ? b : Budgets[User.Id] = new Budget();
                 Kindergeld.Apply(sync.Kindergeld);
                 budget.Apply(sync.Budget);
+                if (LoseNextAnswer)
+                {
+                    LoseNextAnswer = false;
+                    throw new HttpRequestException("The connection was lost.");
+                }
                 return Json(JsonSerializer.Serialize(new SyncResponse(Kindergeld, budget), ApiJson.Default.SyncResponse));
             default:
                 return new HttpResponseMessage(HttpStatusCode.NotFound);

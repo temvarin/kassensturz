@@ -133,6 +133,39 @@ public class SyncTests : AppTestContext
     }
 
     [Fact]
+    public void An_entry_deleted_while_a_lost_sync_is_retried_stays_deleted()
+    {
+        var shoes = Data.Kindergeld.Spend(Today, 35, "Kleidung");
+        Server.LoseNextAnswer = true;
+        var card = Render<AccountCard>();
+        card.WaitForAssertion(() => Assert.Single(Server.Kindergeld.Entries)); // saved, but the app doesn't know
+
+        Data.Kindergeld.Remove(shoes.Id);
+        State.Save();
+        Clock.Advance(SyncService.RetryAfter);
+
+        card.WaitForAssertion(() => Assert.Equal("gerade eben", card.Find(".sync").TextContent));
+        Assert.Empty(Server.Kindergeld.Entries);
+        Assert.Empty(Stored.Kindergeld.Entries);
+    }
+
+    [Fact]
+    public void When_another_account_signed_in_meanwhile_nothing_is_sent_for_it()
+    {
+        Started();
+        Server.User = FakeServer.Ben; // signed in in another tab; this app still thinks Anna is
+        Server.Next.Enqueue(() => Error(HttpStatusCode.PreconditionFailed));
+        var card = Render<AccountCard>();
+
+        Data.Budget.SetSalary(2850);
+        State.Save();
+        Clock.Advance(SyncService.AfterSave);
+
+        card.WaitForAssertion(() => Button(card, "Daten auf diesem Gerät zurücksetzen"));
+        Assert.DoesNotContain(FakeServer.Ben.Id, Server.Budgets.Keys);
+    }
+
+    [Fact]
     public void An_app_older_than_the_server_asks_to_be_restarted()
     {
         Server.Next.Enqueue(() => Error(HttpStatusCode.Conflict));
@@ -158,7 +191,7 @@ public class SyncTests : AppTestContext
     public void Data_of_another_account_is_not_synced_until_the_device_is_reset()
     {
         Data.Kindergeld.Receive(Today, 100);
-        Data.CompleteSync(Data.StartSync(), new SyncResponse(new KindergeldPot(), new Budget()), FakeServer.Ben.Id, Clock.GetUtcNow());
+        Data.CompleteSync(Data.StartSync(FakeServer.Ben.Id), new SyncResponse(new KindergeldPot(), new Budget()), Clock.GetUtcNow());
         var annas = Server.Kindergeld.Receive(Today, 518);
         var card = Render<AccountCard>();
         card.WaitForAssertion(() => Button(card, "Daten auf diesem Gerät zurücksetzen"));

@@ -22,7 +22,7 @@ public class SyncApiTests(WebApplicationFactory<Program> factory) : IClassFixtur
         host.ConfigureTestServices(services => services.AddSingleton<IDocumentStore>(documents));
     }).CreateClient();
 
-    private static SyncRequest Changes(AppData phone) => phone.StartSync().Request;
+    private static SyncRequest Changes(AppData phone, string user = "anna") => phone.StartSync(user).Request;
 
     private async Task<HttpResponseMessage> Post(string user, HttpContent content)
     {
@@ -48,7 +48,7 @@ public class SyncApiTests(WebApplicationFactory<Program> factory) : IClassFixtur
         anna.Budget.SetSalary(2850);
         await Sync("anna", Changes(anna));
 
-        var ben = await Sync("ben", Changes(new AppData()));
+        var ben = await Sync("ben", Changes(new AppData(), "ben"));
 
         Assert.Equal([payment], ben.Kindergeld.Entries);
         Assert.Equal(0m, ben.Budget.NetSalary);
@@ -77,7 +77,7 @@ public class SyncApiTests(WebApplicationFactory<Program> factory) : IClassFixtur
         documents.BeforeNextSave = async () => await documents.TrySaveAsync("kindergeld",
             System.Text.Json.JsonSerializer.Serialize(Apply(anna), ApiJson.Default.KindergeldPot), 0);
 
-        var answer = await Sync("ben", Changes(ben));
+        var answer = await Sync("ben", Changes(ben, "ben"));
 
         Assert.Equal([jacket, payment], answer.Kindergeld.Entries);
     }
@@ -85,7 +85,8 @@ public class SyncApiTests(WebApplicationFactory<Program> factory) : IClassFixtur
     [Fact]
     public async Task An_app_with_another_protocol_is_asked_to_reload()
     {
-        var response = await Post("anna", Changes(new AppData()) with { Protocol = SyncRequest.CurrentProtocol - 1 });
+        // As an older app sends it: an older protocol, and no user id.
+        var response = await Post("anna", Changes(new AppData()) with { Protocol = SyncRequest.CurrentProtocol - 1, UserId = null });
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.Empty(documents.Ids);
@@ -109,6 +110,45 @@ public class SyncApiTests(WebApplicationFactory<Program> factory) : IClassFixtur
     [InlineData("not json")]
     public async Task An_incomplete_request_is_refused(string json)
     {
+        var response = await Post("anna", new StringContent(json, Encoding.UTF8, "application/json"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_request_for_another_account_than_the_one_signed_in_is_refused_before_anything_is_saved()
+    {
+        // The app still thinks Anna is signed in, but Ben signed in since (in another tab, on the same device).
+        var anna = new AppData();
+        anna.Budget.SetSalary(2850);
+
+        var response = await Post("ben", Changes(anna, "anna"));
+
+        Assert.Equal(HttpStatusCode.PreconditionFailed, response.StatusCode);
+        Assert.Empty(documents.Ids);
+    }
+
+    [Fact]
+    public async Task A_valid_pot_change_with_an_invalid_budget_change_saves_neither()
+    {
+        var anna = new AppData();
+        anna.Kindergeld.Receive(Today, 518);
+
+        var response = await Post("anna", Changes(anna) with { Budget = new(-100, new([], []), new([], [])) });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(documents.Ids);
+    }
+
+    [Fact]
+    public async Task A_missing_item_is_refused_as_a_bad_request()
+    {
+        var json = $$"""
+            {"protocol":{{SyncRequest.CurrentProtocol}},"userId":"anna",
+             "kindergeld":{"settings":null,"entries":{"changed":[null],"removed":[] } },
+             "budget":{"netSalary":null,"deductions":{"changed":[],"removed":[]},"planned":{"changed":[],"removed":[] } } }
+            """;
+
         var response = await Post("anna", new StringContent(json, Encoding.UTF8, "application/json"));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);

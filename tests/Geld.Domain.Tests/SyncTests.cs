@@ -23,8 +23,8 @@ public class SyncTests
 
         public void Sync(string user, AppData phone)
         {
-            var pending = phone.StartSync();
-            phone.CompleteSync(pending, Sync(user, Network(pending.Request)), user, Now);
+            var pending = phone.StartSync(user);
+            phone.CompleteSync(pending, Sync(user, Network(pending.Request)), Now);
         }
     }
 
@@ -264,10 +264,10 @@ public class SyncTests
         var server = new Server();
         var phone = new AppData();
         phone.Kindergeld.Receive(Today, 518);
-        var pending = phone.StartSync();
+        var pending = phone.StartSync("anna");
         var shoes = phone.Kindergeld.Spend(Today, 35, "Kleidung");
 
-        phone.CompleteSync(pending, server.Sync("anna", pending.Request), "anna", Now);
+        phone.CompleteSync(pending, server.Sync("anna", pending.Request), Now);
 
         Assert.Contains(shoes, phone.Kindergeld.Entries);
         Assert.True(phone.HasUnsyncedChanges);
@@ -284,10 +284,10 @@ public class SyncTests
         var payment = phone.Kindergeld.Receive(Today, 518);
         server.Sync("anna", phone);
         phone.Kindergeld.Update(payment with { Amount = 259 });
-        var pending = phone.StartSync();
+        var pending = phone.StartSync("anna");
         phone.Kindergeld.Update(payment);
 
-        phone.CompleteSync(pending, server.Sync("anna", pending.Request), "anna", Now);
+        phone.CompleteSync(pending, server.Sync("anna", pending.Request), Now);
         server.Sync("anna", phone);
 
         Assert.Equal(518m, Assert.Single(server.Kindergeld.Entries).Amount);
@@ -311,9 +311,8 @@ public class SyncTests
         var phone = new AppData();
         var server = new Server();
         server.Sync("anna", phone);
-        var pending = phone.StartSync();
 
-        Assert.Throws<InvalidOperationException>(() => phone.CompleteSync(pending, server.Sync("ben", pending.Request), "ben", Now));
+        Assert.Throws<InvalidOperationException>(() => phone.StartSync("ben"));
     }
 
     [Fact]
@@ -350,6 +349,68 @@ public class SyncTests
     }
 
     [Fact]
+    public void A_request_says_which_account_it_is_for()
+    {
+        Assert.Equal("anna", new AppData().StartSync("anna").Request.UserId);
+    }
+
+    [Fact]
+    public void An_entry_deleted_after_a_sync_whose_answer_was_lost_stays_deleted()
+    {
+        // The server saved the entry, but the answer never arrived: the phone can't know whether it was saved.
+        var server = new Server();
+        var phone = new AppData();
+        var shoes = phone.Kindergeld.Spend(Today, 35, "Kleidung");
+        var lost = phone.StartSync("anna");
+        server.Sync("anna", Network(lost.Request));
+        phone.SyncFailed(lost);
+        phone.Kindergeld.Remove(shoes.Id); // while waiting for the retry
+
+        phone = DataStore.TryRead(DataStore.Serialize(phone))!; // the app may also have been restarted meanwhile
+        server.Sync("anna", phone);
+
+        Assert.Empty(server.Kindergeld.Entries);
+        Assert.Empty(phone.Kindergeld.Entries);
+        Assert.False(phone.HasUnsyncedChanges);
+    }
+
+    [Fact]
+    public void Settings_and_edits_undone_after_a_lost_answer_are_undone_on_the_server_too()
+    {
+        var server = new Server();
+        var phone = new AppData();
+        var payment = phone.Kindergeld.Receive(Today, 518);
+        phone.Budget.SetSalary(2850);
+        server.Sync("anna", phone);
+        phone.Kindergeld.Update(payment with { Amount = 259 });
+        phone.Kindergeld.Configure(children: 2, endDigit: 4);
+        phone.Budget.SetSalary(3000);
+        var lost = phone.StartSync("anna");
+        server.Sync("anna", Network(lost.Request));
+        phone.SyncFailed(lost);
+        phone.Kindergeld.Update(payment);
+        phone.Kindergeld.Configure(children: 1, endDigit: null);
+        phone.Budget.SetSalary(2850);
+
+        server.Sync("anna", phone);
+
+        Assert.Equal(518m, Assert.Single(server.Kindergeld.Entries).Amount);
+        Assert.Equal((1, (int?)null), (server.Kindergeld.Children, server.Kindergeld.EndDigit));
+        Assert.Equal(2850m, server.Budgets["anna"].NetSalary);
+    }
+
+    [Fact]
+    public void A_sync_state_after_a_lost_answer_is_never_in_a_backup()
+    {
+        var phone = new AppData();
+        phone.Kindergeld.Receive(Today, 518);
+        phone.SyncFailed(phone.StartSync("anna"));
+
+        Assert.True(phone.HasUnsyncedChanges);
+        Assert.Null(DataStore.TryRead(DataStore.Backup(phone, Today))?.Unconfirmed);
+    }
+
+    [Fact]
     public void Phones_that_edit_and_sync_in_any_order_end_up_with_the_same_data_as_the_server()
     {
         // Three devices of two people edit at random and sync in random order, also editing while a sync is under way.
@@ -368,11 +429,12 @@ public class SyncTests
                 switch (random.Next(3))
                 {
                     case 0 when inFlight[d] is null:
-                        var pending = phone.StartSync();
+                        var pending = phone.StartSync(user);
                         inFlight[d] = (pending, server.Sync(user, Network(pending.Request)));
                         break;
                     case 1 when inFlight[d] is { } sync:
-                        phone.CompleteSync(sync.Sent, sync.Answer, user, Now);
+                        if (random.Next(4) == 0) phone.SyncFailed(sync.Sent); // the answer got lost
+                        else phone.CompleteSync(sync.Sent, sync.Answer, Now);
                         inFlight[d] = null;
                         break;
                     default:
@@ -382,7 +444,7 @@ public class SyncTests
             }
             for (var d = 0; d < devices.Length; d++)
             {
-                if (inFlight[d] is { } sync) devices[d].Item2.CompleteSync(sync.Sent, sync.Answer, devices[d].Item1, Now);
+                if (inFlight[d] is { } sync) devices[d].Item2.CompleteSync(sync.Sent, sync.Answer, Now);
             }
             for (var round = 0; round < 2; round++)
             {

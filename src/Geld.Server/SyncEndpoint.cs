@@ -32,22 +32,31 @@ public static class SyncEndpoint
         if (request is null) return Results.BadRequest();
         if (request.Protocol != SyncRequest.CurrentProtocol) return Results.Conflict(); // the app asks the user to reload
 
+        // The data the app sends belongs to the account it last saw signed in. If the cookie now belongs to someone
+        // else, that data must not end up in their budget.
+        var userId = user.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        if (request.UserId != userId) return Results.StatusCode(StatusCodes.Status412PreconditionFailed);
+
+        // All or nothing: the whole request is checked before the first document is saved. Applying the changes to
+        // empty documents runs every rule.
         try
         {
-            // The budget's id comes from the sign-in, never from the request: nobody can read or write another's.
-            var budgetId = $"budget:{user.FindFirstValue(ClaimTypes.NameIdentifier)}";
-            var kindergeld = await SaveAsync(documents, "kindergeld", request.Kindergeld.IsEmpty,
-                pot => pot.Apply(request.Kindergeld), ApiJson.Default.KindergeldPot, cancellationToken);
-            var budget = await SaveAsync(documents, budgetId, request.Budget.IsEmpty,
-                b => b.Apply(request.Budget), ApiJson.Default.Budget, cancellationToken);
-            return kindergeld is null || budget is null
-                ? Results.StatusCode(StatusCodes.Status503ServiceUnavailable) // the app tries again later
-                : Results.Json(new SyncResponse(kindergeld, budget), ApiJson.Default.SyncResponse);
+            new KindergeldPot().Apply(request.Kindergeld);
+            new Budget().Apply(request.Budget);
         }
         catch (ArgumentException)
         {
             return Results.BadRequest(); // changes that break the rules, which the app itself doesn't send
         }
+
+        // The budget's id comes from the sign-in, never from the request: nobody can read or write another's.
+        var kindergeld = await SaveAsync(documents, "kindergeld", request.Kindergeld.IsEmpty,
+            pot => pot.Apply(request.Kindergeld), ApiJson.Default.KindergeldPot, cancellationToken);
+        var budget = await SaveAsync(documents, $"budget:{userId}", request.Budget.IsEmpty,
+            b => b.Apply(request.Budget), ApiJson.Default.Budget, cancellationToken);
+        return kindergeld is null || budget is null
+            ? Results.StatusCode(StatusCodes.Status503ServiceUnavailable) // the app tries again later
+            : Results.Json(new SyncResponse(kindergeld, budget), ApiJson.Default.SyncResponse);
     }
 
     /// <summary>Applies the changes to the latest version of the document (a new one if there is none yet) and saves it.</summary>

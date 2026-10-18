@@ -76,6 +76,15 @@ public class DataStoreTests
     public void A_file_that_is_not_a_backup_of_this_version_is_rejected(string json) =>
         Assert.Null(DataStore.TryRead(json));
 
+    [Theory]
+    [InlineData("""{"schema":1,"data":{"kindergeld":null,"budget":null}}""")]
+    [InlineData("""{"schema":1,"data":{"kindergeld":{"children":0},"budget":{}}}""")]
+    [InlineData("""{"schema":1,"data":{"kindergeld":{},"budget":{"netSalary":-100}}}""")]
+    [InlineData("""{"schema":1,"data":{"kindergeld":{"entries":[null]},"budget":{}}}""")]
+    [InlineData("""{"schema":1,"data":{"kindergeld":{"entries":[{"id":"8c3f0b4e-1d2a-4c5b-9e6f-7a8b9c0d1e2f","kind":"Payment","date":"2026-10-14","amount":-518}]},"budget":{}}}""")]
+    public void A_file_that_breaks_the_app_s_rules_is_rejected(string json) =>
+        Assert.Null(DataStore.TryRead(json));
+
     [Fact]
     public void Unreadable_stored_data_does_not_crash_the_app()
     {

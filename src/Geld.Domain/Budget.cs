@@ -77,6 +77,10 @@ public sealed class Budget
         ItemChanges.Between(before.Deductions, Deductions),
         ItemChanges.Between(before.Planned, Planned));
 
+    /// <summary>The salary and items that <paramref name="touched"/> is about, as they are now.</summary>
+    internal BudgetChanges Now(BudgetChanges touched) =>
+        new(touched.NetSalary is null ? null : NetSalary, touched.Deductions.Now(Deductions), touched.Planned.Now(Planned));
+
     /// <summary>Takes over changes made on another device. All or nothing: throws if any of them breaks the rules.</summary>
     public void Apply(BudgetChanges changes)
     {

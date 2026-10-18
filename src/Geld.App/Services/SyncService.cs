@@ -169,7 +169,7 @@ public sealed class SyncService(AppState state, HttpClient http, TimeProvider cl
 
     private async Task<SyncStatus> SendAsync()
     {
-        var pending = state.Data.StartSync();
+        var pending = state.Data.StartSync(Me!.Id);
         try
         {
             using var response = await http.PostAsJsonAsync(new Uri("api/sync", UriKind.Relative), pending.Request, ApiJson.Default.SyncRequest);
@@ -182,13 +182,19 @@ public sealed class SyncService(AppState state, HttpClient http, TimeProvider cl
                     return SyncStatus.NotMember;
                 case HttpStatusCode.Conflict:
                     return SyncStatus.Outdated;
+                case HttpStatusCode.PreconditionFailed: // someone else signed in meanwhile, e.g. in another tab
+                    await CheckAccountAsync();
+                    return Status;
             }
             response.EnsureSuccessStatusCode();
             var answer = await response.Content.ReadFromJsonAsync(ApiJson.Default.SyncResponse) ?? throw new JsonException("No answer.");
-            state.Data.CompleteSync(pending, answer, Me!.Id, clock.GetUtcNow());
+            state.Data.CompleteSync(pending, answer, clock.GetUtcNow());
         }
         catch (Exception e) when (e is HttpRequestException or JsonException or TaskCanceledException)
         {
+            // Without an answer, the server may have saved the changes anyway: the next sync takes that into account.
+            state.Data.SyncFailed(pending);
+            state.Save();
             return SyncStatus.Failed;
         }
         state.Save(); // if something changed meanwhile, OnSaved asks for another sync

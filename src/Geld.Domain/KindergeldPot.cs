@@ -67,6 +67,10 @@ public sealed class KindergeldPot
         (Children, EndDigit) == (before.Children, before.EndDigit) ? null : new KindergeldSettings(Children, EndDigit),
         ItemChanges.Between(before.Entries, Entries));
 
+    /// <summary>The settings and entries that <paramref name="touched"/> is about, as they are now.</summary>
+    internal KindergeldChanges Now(KindergeldChanges touched) =>
+        new(touched.Settings is null ? null : new KindergeldSettings(Children, EndDigit), touched.Entries.Now(Entries));
+
     /// <summary>Takes over changes made on another device. All or nothing: throws if any of them breaks the rules.</summary>
     public void Apply(KindergeldChanges changes)
     {

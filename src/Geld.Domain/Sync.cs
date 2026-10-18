@@ -19,10 +19,23 @@ public sealed record ItemChanges<T>(IReadOnlyList<T> Changed, IReadOnlyList<Guid
     /// <param name="valid">Checks an item with the rules that apply when it is entered; throws if it breaks them.</param>
     internal (IReadOnlyList<T> Kept, IReadOnlyList<T> Added) ApplyTo(IReadOnlyList<T> items, Func<T, T> valid)
     {
-        var changed = Changed.Select(valid).ToDictionary(i => i.Id); // throws for an id that appears twice
+        // Throws for a missing item (JSON null) and for an id that appears twice.
+        var changed = Changed.Select(i => valid(i ?? throw new ArgumentNullException(nameof(items)))).ToDictionary(i => i.Id);
         var removed = Removed.ToHashSet();
         IReadOnlyList<T> kept = [.. items.Where(i => !removed.Contains(i.Id)).Select(i => changed.Remove(i.Id, out var c) ? c : i)];
         return (kept, [.. Changed.Where(i => changed.ContainsKey(i.Id)).Select(i => changed[i.Id])]);
+    }
+
+    /// <summary>Both changes together; for an item in both, this one's.</summary>
+    internal ItemChanges<T> Union(ItemChanges<T> other) =>
+        new([.. Changed.UnionBy(other.Changed, i => i.Id)], [.. Removed.Union(other.Removed)]);
+
+    /// <summary>The same items as they are now in <paramref name="items"/>: changed if still there, removed if not.</summary>
+    internal ItemChanges<T> Now(IReadOnlyList<T> items)
+    {
+        var ids = Changed.Select(i => i.Id).Concat(Removed).ToHashSet();
+        var present = items.Where(i => ids.Contains(i.Id)).ToList();
+        return new(present, [.. ids.Except(present.Select(i => i.Id))]);
     }
 }
 
@@ -38,12 +51,17 @@ public sealed record KindergeldSettings(int Children, int? EndDigit);
 public sealed record KindergeldChanges(KindergeldSettings? Settings, ItemChanges<Entry> Entries)
 {
     public bool IsEmpty => Settings is null && Entries.IsEmpty;
+
+    internal KindergeldChanges Union(KindergeldChanges other) => new(Settings ?? other.Settings, Entries.Union(other.Entries));
 }
 
 /// <param name="NetSalary">null if unchanged.</param>
 public sealed record BudgetChanges(decimal? NetSalary, ItemChanges<Deduction> Deductions, ItemChanges<PlannedSpending> Planned)
 {
     public bool IsEmpty => NetSalary is null && Deductions.IsEmpty && Planned.IsEmpty;
+
+    internal BudgetChanges Union(BudgetChanges other) =>
+        new(NetSalary ?? other.NetSalary, Deductions.Union(other.Deductions), Planned.Union(other.Planned));
 }
 
 /// <summary>
@@ -55,9 +73,14 @@ public sealed record BudgetChanges(decimal? NetSalary, ItemChanges<Deduction> De
 /// restarted, and an old version would drop what it doesn't know when it sends data back; so the server refuses
 /// requests of another protocol. Raise <see cref="CurrentProtocol"/> whenever that shape changes.
 /// </param>
-public sealed record SyncRequest(int Protocol, KindergeldChanges Kindergeld, BudgetChanges Budget)
+/// <param name="UserId">
+/// The account the phone's data belongs to. The server refuses the request if someone else is signed in: the sign-in
+/// cookie may have changed since the app last asked (another account signed in, in another tab). Optional only so that
+/// requests of older apps, which don't send it, still reach the protocol check.
+/// </param>
+public sealed record SyncRequest(int Protocol, KindergeldChanges Kindergeld, BudgetChanges Budget, string? UserId = null)
 {
-    public const int CurrentProtocol = 1;
+    public const int CurrentProtocol = 2;
 
     public bool IsEmpty => Kindergeld.IsEmpty && Budget.IsEmpty;
 }

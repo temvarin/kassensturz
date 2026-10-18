@@ -22,12 +22,20 @@ public sealed class AppData
     /// <summary>null until the first sync.</summary>
     [JsonInclude] public SyncState? Sync { get; internal set; }
 
+    /// <summary>
+    /// The changes of syncs whose answer never came (a timeout, a lost connection): the server may or may not have
+    /// saved them. Until a sync succeeds, the items they touched are sent again as they are now, so that whatever the
+    /// server did, it ends up with this device's data; diffing against the last confirmed state alone would miss, for
+    /// example, an entry deleted after the lost sync added it on the server. null if there are none.
+    /// </summary>
+    [JsonInclude] public SyncRequest? Unconfirmed { get; internal set; }
+
     [JsonIgnore]
     public bool IsEmpty => Kindergeld.Entries.Count == 0 && Budget.NetSalary == 0
         && Budget.Deductions.Count == 0 && Budget.Planned.Count == 0;
 
     /// <summary>Whether something changed since the last sync. Before the first sync, all data counts as a change.</summary>
-    [JsonIgnore] public bool HasUnsyncedChanges => !Changes().IsEmpty;
+    [JsonIgnore] public bool HasUnsyncedChanges => Changes() is var (kindergeld, budget) && !(kindergeld.IsEmpty && budget.IsEmpty);
 
     /// <summary>
     /// Whether data exists only in the browser's storage, which the browser may delete without warning.
@@ -50,27 +58,42 @@ public sealed class AppData
     }
 
     /// <summary>The request for a sync: what changed since the last one (on a first sync, everything).</summary>
-    public PendingSync StartSync() => new(Changes(), Copy(Kindergeld), Copy(Budget));
+    /// <exception cref="InvalidOperationException">The data here was synced with another account.</exception>
+    public PendingSync StartSync(string userId)
+    {
+        if (Sync is { } sync && sync.UserId != userId)
+            throw new InvalidOperationException("The data on this device belongs to another account.");
+        var (kindergeld, budget) = Changes();
+        return new(new SyncRequest(SyncRequest.CurrentProtocol, kindergeld, budget, userId), Copy(Kindergeld), Copy(Budget));
+    }
 
     /// <summary>
     /// Takes the server's answer. It has every change the server received, this device's included, but not the changes
     /// made here while the request was under way: those are applied on top of it again, and wait for the next sync.
     /// </summary>
-    /// <exception cref="InvalidOperationException">The data here was synced with another account.</exception>
-    public void CompleteSync(PendingSync sent, SyncResponse answer, string userId, DateTimeOffset now)
+    public void CompleteSync(PendingSync sent, SyncResponse answer, DateTimeOffset now)
     {
-        if (Sync is { } sync && sync.UserId != userId)
-            throw new InvalidOperationException("The data on this device belongs to another account.");
         var kindergeld = Copy(answer.Kindergeld);
         kindergeld.Apply(Kindergeld.ChangesSince(sent.Kindergeld));
         var budget = Copy(answer.Budget);
         budget.Apply(Budget.ChangesSince(sent.Budget));
-        (Kindergeld, Budget, Sync) = (kindergeld, budget, new SyncState(userId, now, answer.Kindergeld, answer.Budget));
+        (Kindergeld, Budget, Unconfirmed) = (kindergeld, budget, null);
+        Sync = new SyncState(sent.Request.UserId!, now, answer.Kindergeld, answer.Budget);
     }
 
-    private SyncRequest Changes() => new(SyncRequest.CurrentProtocol,
-        Kindergeld.ChangesSince(Sync?.Kindergeld ?? new()),
-        Budget.ChangesSince(Sync?.Budget ?? new()));
+    /// <summary>No answer came: the server may or may not have saved <paramref name="sent"/>.</summary>
+    public void SyncFailed(PendingSync sent) => Unconfirmed = Unconfirmed is { } earlier
+        ? earlier with { Kindergeld = earlier.Kindergeld.Union(sent.Request.Kindergeld), Budget = earlier.Budget.Union(sent.Request.Budget) }
+        : sent.Request;
+
+    private (KindergeldChanges, BudgetChanges) Changes()
+    {
+        var kindergeld = Kindergeld.ChangesSince(Sync?.Kindergeld ?? new());
+        var budget = Budget.ChangesSince(Sync?.Budget ?? new());
+        return Unconfirmed is { } unconfirmed
+            ? (kindergeld.Union(Kindergeld.Now(unconfirmed.Kindergeld)), budget.Union(Budget.Now(unconfirmed.Budget)))
+            : (kindergeld, budget);
+    }
 
     private static T Copy<T>(T value) where T : class
     {
