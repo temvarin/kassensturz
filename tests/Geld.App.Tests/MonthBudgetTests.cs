@@ -1,9 +1,34 @@
 using Geld.App.Pages;
+using Geld.App.Services;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Geld.App.Tests;
 
 public class MonthBudgetTests : AppTestContext
 {
+    [Fact]
+    public void An_app_left_open_shows_the_new_month_when_it_comes_back_to_the_front()
+    {
+        var page = Render<MonthBudget>();
+        Assert.Contains("Oktober 2026", page.Find(".month-nav").TextContent);
+
+        Clock.Advance(TimeSpan.FromDays(18)); // 1 November
+        Services.GetRequiredService<AppState>().Refresh();
+
+        page.WaitForAssertion(() => Assert.Contains("November 2026", page.Find(".month-nav").TextContent));
+    }
+
+    [Fact]
+    public void Editing_the_salary_starts_with_the_current_one()
+    {
+        Data.Budget.SetSalary(2850);
+        var page = Render<MonthBudget>();
+
+        page.Find("button.card").Click();
+
+        Assert.Equal("2850,00", page.Find(".sheet input[inputmode=decimal]").GetAttribute("value"));
+    }
+
     public MonthBudgetTests()
     {
         Data.Budget.SetSalary(2850);

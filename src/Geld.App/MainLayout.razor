@@ -1,6 +1,7 @@
 @inherits LayoutComponentBase
 @inject Browser Browser
 @inject SyncService Sync
+@inject AppState State
 
 <header class="topbar">
     <SectionOutlet SectionName="@TopBar.Section" />
@@ -16,7 +17,11 @@
     {
         if (!firstRender) return;
         await Browser.ProtectStorageAsync();
-        await Browser.WhenVisibleAsync(Sync.ResumeAsync);
+        await Browser.WhenVisibleAsync(async () =>
+        {
+            State.Refresh();
+            await Sync.ResumeAsync();
+        });
         await Sync.StartAsync();
     }
 }

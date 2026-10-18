@@ -23,11 +23,11 @@
         <Icon Name="chevron-right" />
     </a>
 }
-else if (Pot.NextPayment(today) is { } next)
+else if (Pot.NextPayment(Today) is { } next)
 {
     <div class="card next">
         <Icon Name="calendar-event" />
-        <span><b>@German.DayMonth(next)</b><small>Nächste Überweisung · @German.Relative(next, today)</small></span>
+        <span><b>@German.DayMonth(next)</b><small>Nächste Überweisung · @German.Relative(next, Today)</small></span>
         <b class="amount">@Euro.Format(Pot.QuickAmount)</b>
     </div>
 }
@@ -69,12 +69,12 @@ else
 
 @if (sheetKind is { } kind)
 {
-    <EntrySheet Kind="kind" Existing="editing" Today="today" Suggestions="Pot.CategorySuggestions()"
+    <EntrySheet Kind="kind" Existing="editing" Today="Today" Suggestions="Pot.CategorySuggestions()"
                 OnSave="Save" OnDelete="Delete" OnClose="Close" />
 }
 
 @code {
-    private DateOnly today;
+    private DateOnly Today => Clock.Today(); // never stored: the app may stay open across midnight
     private EntryKind? sheetKind;
     private Entry? editing;
 
@@ -83,12 +83,10 @@ else
     private string Kicker =>
         $"{Pot.Children} {(Pot.Children == 1 ? "Kind" : "Kinder")} · {(Pot.EndDigit is { } d ? $"Endziffer {d}" : "Endziffer fehlt")}";
 
-    protected override void OnInitialized() => today = Clock.Today();
-
     /// <summary>One month of Kindergeld, booked today: the common case is a single tap.</summary>
     private void ReceiveMonth()
     {
-        Pot.Receive(today, Pot.QuickAmount);
+        Pot.Receive(Today, Pot.QuickAmount);
         State.Save();
     }
 

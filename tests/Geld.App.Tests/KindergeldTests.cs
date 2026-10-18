@@ -19,6 +19,17 @@ public class KindergeldTests : AppTestContext
     }
 
     [Fact]
+    public void An_app_left_open_overnight_books_on_the_new_day()
+    {
+        var page = Render<Home>();
+
+        Clock.Advance(TimeSpan.FromDays(1));
+        Button(page, "259,00 € erhalten").Click();
+
+        Assert.Equal(Today.AddDays(1), Assert.Single(Stored.Kindergeld.Entries).Date);
+    }
+
+    [Fact]
     public void Shows_when_the_next_Kindergeld_comes()
     {
         Data.Kindergeld.Configure(children: 1, endDigit: 4);

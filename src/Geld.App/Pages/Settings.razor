@@ -43,7 +43,7 @@
     </p>
     <div class="setting">
         <span>Letzte Sicherung</span>
-        <b>@(State.Data.LastBackup is { } last ? German.Relative(last, today) : "noch nie")</b>
+        <b>@(State.Data.LastBackup is { } last ? German.Relative(last, Today) : "noch nie")</b>
     </div>
     <div class="setting">
         <span>Vor Speichermangel geschützt<small>Entscheidet der Browser</small></span>
@@ -61,12 +61,10 @@
 @code {
     private const long MaxBackupBytes = 5_000_000;
 
-    private DateOnly today;
+    private DateOnly Today => Clock.Today(); // never stored: the app may stay open across midnight
     private bool? storageProtected;
 
     private KindergeldPot Pot => State.Data.Kindergeld;
-
-    protected override void OnInitialized() => today = Clock.Today();
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -89,10 +87,10 @@
 
     private async Task Export()
     {
-        var fileName = $"{TopBar.AppName.ToLowerInvariant()}-{today:yyyy-MM-dd}.json";
-        if (await Browser.SaveFileAsync(fileName, DataStore.Backup(State.Data, today)))
+        var fileName = $"{TopBar.AppName.ToLowerInvariant()}-{Today:yyyy-MM-dd}.json";
+        if (await Browser.SaveFileAsync(fileName, DataStore.Backup(State.Data, Today)))
         {
-            State.Data.MarkBackedUp(today);
+            State.Data.MarkBackedUp(Today);
             State.Save();
         }
     }

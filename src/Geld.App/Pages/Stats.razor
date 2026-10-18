@@ -65,7 +65,7 @@
 @code {
     private enum Period { Month, Year, All }
 
-    private DateOnly today;
+    private DateOnly Today => Clock.Today(); // never stored: the app may stay open across midnight
     private Period period = Period.Year;
     private IReadOnlyList<MonthTotals> monthly = [];
     private decimal monthlyMax;
@@ -74,28 +74,24 @@
 
     private IReadOnlyList<CategoryTotal> byCategory = [];
 
-    protected override void OnInitialized()
-    {
-        today = Clock.Today();
-        OnDataChanged();
-    }
+    protected override void OnInitialized() => OnDataChanged();
 
     protected override void OnDataChanged()
     {
         Show(period);
         // Newest first, from the first month with an entry: a new pot shouldn't show a year of empty rows.
-        monthly = [.. Pot.MonthlyTotals(today, 12).SkipWhile(m => m.In == 0 && m.Out == 0).Reverse()];
+        monthly = [.. Pot.MonthlyTotals(Today, 12).SkipWhile(m => m.In == 0 && m.Out == 0).Reverse()];
         monthlyMax = monthly.Select(m => Math.Max(m.In, m.Out)).DefaultIfEmpty().Max();
     }
 
     private void Show(Period p)
     {
         period = p;
-        var month = new DateOnly(today.Year, today.Month, 1);
+        var month = new DateOnly(Today.Year, Today.Month, 1);
         byCategory = p switch
         {
             Period.Month => Pot.SpendingByCategory(month, month.AddMonths(1).AddDays(-1)),
-            Period.Year => Pot.SpendingByCategory(new DateOnly(today.Year, 1, 1), new DateOnly(today.Year, 12, 31)),
+            Period.Year => Pot.SpendingByCategory(new DateOnly(Today.Year, 1, 1), new DateOnly(Today.Year, 12, 31)),
             _ => Pot.SpendingByCategory(DateOnly.MinValue, DateOnly.MaxValue),
         };
     }

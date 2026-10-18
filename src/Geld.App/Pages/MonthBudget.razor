@@ -13,7 +13,7 @@
     <button class="icon-btn" aria-label="Nächster Monat" @onclick="() => Go(1)"><Icon Name="chevron-right" /></button>
 </div>
 
-<button class="card" @onclick="() => sheet = Sheet.Salary">
+<button class="card" @onclick="() => Open(Sheet.Salary)">
     @if (Budget.NetSalary == 0)
     {
         <div class="row"><b>Nettogehalt eintragen</b><Icon Name="chevron-right" /></div>
@@ -59,7 +59,7 @@
                             <b>@line.Deduction.Name</b>
                             @if (line == nextDue)
                             {
-                                <span class="badge">@German.Relative(line.Date, today)</span>
+                                <span class="badge">@German.Relative(line.Date, Today)</span>
                             }
                         </span>
                         <span class="amount">@Euro.Format(line.Deduction.Amount)</span>
@@ -124,7 +124,7 @@
 @code {
     private enum Sheet { None, Salary, Deduction, Planned }
 
-    private DateOnly today;
+    private DateOnly Today => Clock.Today(); // never stored: the app may stay open across midnight
     private int offset; // months after the current one
     private Sheet sheet;
     private Guid? editId;
@@ -132,15 +132,11 @@
     private string? salaryError;
 
     private Budget Budget => State.Data.Budget;
-    private DateOnly Month => new DateOnly(today.Year, today.Month, 1).AddMonths(offset);
+    private DateOnly Month => new DateOnly(Today.Year, Today.Month, 1).AddMonths(offset);
     private MonthOverview overview = null!;
     private DeductionLine? nextDue;
 
-    protected override void OnInitialized()
-    {
-        today = Clock.Today();
-        Refresh();
-    }
+    protected override void OnInitialized() => Refresh();
 
     protected override void OnDataChanged() => Refresh();
 
@@ -152,7 +148,7 @@
 
     private void Refresh()
     {
-        overview = Budget.Overview(Month.Year, Month.Month, today);
+        overview = Budget.Overview(Month.Year, Month.Month, Today);
         nextDue = offset == 0 ? overview.Deductions.FirstOrDefault(d => !d.Done) : null;
     }
 

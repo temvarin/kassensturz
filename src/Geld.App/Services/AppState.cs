@@ -16,6 +16,12 @@ public sealed class AppState(DataStore store)
         Changed?.Invoke();
     }
 
+    /// <summary>
+    /// Lets pages show their data anew without a change, e.g. when the app comes back to the front on another day: what
+    /// they show depends on today's date.
+    /// </summary>
+    public void Refresh() => Changed?.Invoke();
+
     /// <summary>Replaces all data with an imported backup.</summary>
     public void Replace(AppData backup)
     {
