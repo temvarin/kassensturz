@@ -201,6 +201,21 @@ button.banner { width: 100%; font-family: inherit; text-align: left; cursor: poi
 .legend .fixed { background: var(--ink); }
 .legend .planned { background: var(--gold); }
 
+/* Budget: the Rücklage covers what goes beyond the salary (hatched); what it can't cover is red. */
+.split .reserve { background: repeating-linear-gradient(135deg, var(--gold) 0 4px, var(--surface) 4px 8px); border-left: 2px dashed var(--ink); }
+.split .uncovered { background: var(--bad); border-left: 2px solid var(--ink); }
+.legend .reserve { background: repeating-linear-gradient(135deg, var(--gold) 0 3px, var(--surface) 3px 6px); }
+.status { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; padding: 3px 12px; border: 2px solid var(--ink); border-radius: 99px; font-size: 14px; font-weight: 700; }
+.status.covered { background: var(--gold); color: var(--on-gold); }
+.status.uncovered { background: var(--bad); color: var(--on-state); border-color: var(--bad); }
+.reserve-card { display: flex; align-items: center; gap: 12px; }
+.reserve-card > .icon:first-child { font-size: 26px; }
+.reserve-card > span:first-of-type { flex: 1; min-width: 0; }
+.reserve-card.empty { border-style: dashed; box-shadow: none; }
+.reserve-amount { text-align: right; }
+.reserve-amount small { white-space: nowrap; }
+.sheet-hint { margin: -4px 0 16px; }
+
 /* Statistics: ranked bars in one colour */
 .segmented { display: grid; grid-template-columns: repeat(3, 1fr); margin-bottom: 16px; border: 2px solid var(--ink); border-radius: var(--radius); overflow: hidden; box-shadow: 3px 3px 0 var(--ink); }
 .segmented button { min-height: 44px; border: 0; background: var(--surface); font-weight: 700; cursor: pointer; }
@@ -250,6 +265,7 @@ button.banner { width: 100%; font-family: inherit; text-align: left; cursor: poi
 .sheet-head { align-items: center; margin: -6px 0 12px; }
 .sheet-head h2 { font: 700 18px var(--display); }
 .sheet-head .icon-btn { margin: 0 -10px 0 0; }
+.sheet .btn + .btn { margin-top: 14px; }
 
 #blazor-error-ui {
   display: none;

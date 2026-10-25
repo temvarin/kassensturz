@@ -35,6 +35,7 @@ The salary has a different question: what can still be spent this month? Rent, s
   - The net salary, minus fixed costs with their debit day, minus purchases planned for the month, gives what is freely available.
   - Debited costs are struck through and the next one is marked.
   - Later months can be planned ahead.
+  - A **Rücklage**, money besides the salary, covers months that cost more than the salary: such a month says "Gedeckt aus der Rücklage" instead of turning red, and later months start with what is left. Surpluses are not added, because the app can't know whether they were saved or spent.
 - **Backups:** a backup file is saved through the phone's share sheet (Files, iCloud Drive, Google Drive) and can be loaded again on any device. A reminder appears when no backup was made in the last 30 days.
 - **Sync between the family's phones:** signed in with Microsoft, both parents share one Kindergeld pot, and each budget stays private. Changes made offline go out with the next sync. Without signing in, nothing leaves the phone.
 - **Works offline**, installs to the home screen on iPhone and Android, and follows the phone's dark mode. No tracking.

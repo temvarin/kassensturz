@@ -22,16 +22,58 @@
     else
     {
         <div class="label">Frei verfügbar</div>
-        <div class="big amount @(overview.Available < 0 ? "negative" : null)">@Euro.Format(overview.Available)</div>
+        @* Red only for what nothing covers: a month the Rücklage covers is planned that way. *@
+        <div class="big amount @(overview.Uncovered > 0 ? "negative" : null)">@Euro.Format(overview.Available)</div>
+        @* The salary pays the fixed costs first, then what is planned; what goes beyond it comes from the Rücklage. *@
         <div class="split" aria-hidden="true">
-            <div class="fixed" style="width: @Percent(overview.FixedTotal)"></div>
-            <div class="planned" style="width: @Percent(overview.PlannedTotal)"></div>
+            <div class="fixed" style="width: @Percent(FixedPaid)"></div>
+            <div class="planned" style="width: @Percent(PlannedPaid)"></div>
+            @if (overview.FromReserve > 0)
+            {
+                <div class="reserve" style="width: @Percent(overview.FromReserve)"></div>
+            }
+            @if (overview.Uncovered > 0)
+            {
+                <div class="uncovered" style="width: @Percent(overview.Uncovered)"></div>
+            }
         </div>
         <div class="legend">
             <span><i class="fixed"></i>@Euro.Format(overview.FixedTotal) Fixkosten</span>
             <span><i class="planned"></i>@Euro.Format(overview.PlannedTotal) geplant</span>
+            @if (overview.FromReserve > 0)
+            {
+                <span><i class="reserve"></i>@Euro.Format(overview.FromReserve) aus der Rücklage</span>
+            }
         </div>
+        @if (overview.Uncovered > 0)
+        {
+            <div class="status uncovered">Nicht gedeckt: @Euro.Format(overview.Uncovered)</div>
+        }
+        else if (overview.FromReserve > 0)
+        {
+            <div class="status covered"><Icon Name="pig-money" />Gedeckt aus der Rücklage</div>
+        }
     }
+</button>
+
+<button class="card reserve-card @(overview.ReserveAtStart is null ? "empty" : null)" @onclick="() => Open(Sheet.Reserve)">
+    <Icon Name="pig-money" />
+    @if (overview.ReserveAtStart is { } reserve)
+    {
+        <span><b>Rücklage</b><small>@ReserveNote</small></span>
+        <span class="reserve-amount">
+            <b class="amount">@Euro.Format(reserve)</b>
+            @if (overview.FromReserve > 0)
+            {
+                <small>danach @Euro.Format(overview.ReserveAfter ?? 0)</small>
+            }
+        </span>
+    }
+    else
+    {
+        <span><b>Rücklage eintragen</b><small>Geld neben dem Gehalt, falls ein Monat mehr kostet</small></span>
+    }
+    <Icon Name="chevron-right" />
 </button>
 
 <div class="section">
@@ -105,6 +147,23 @@
             </form>
         </Sheet>
         break;
+    case Sheet.Reserve:
+        <Sheet Title="Rücklage" OnClose="Close">
+            <form @onsubmit="SaveReserve">
+                <AmountField @bind-Value="reserveInput" Error="@reserveError" Autofocus />
+                <p class="hint sheet-hint">
+                    Geld neben dem Gehalt: Tagesgeld, Sparkonto, Übriges aus früheren Monaten. Kostet ein Monat mehr als das
+                    Gehalt, wird es daraus gedeckt.<br />
+                    Stand: heute. Trag den Betrag neu ein, wenn du auf dein Konto schaust.
+                </p>
+                <button type="submit" class="btn primary">Speichern</button>
+                @if (Budget.Reserve is not null)
+                {
+                    <button type="button" class="btn danger" @onclick="RemoveReserve"><Icon Name="trash" />Rücklage entfernen</button>
+                }
+            </form>
+        </Sheet>
+        break;
     case Sheet.Deduction:
         var deduction = Budget.Deductions.FirstOrDefault(d => d.Id == editId);
         <BudgetItemSheet Title="@(deduction is null ? "Fixkosten" : "Fixkosten bearbeiten")" NamePlaceholder="Miete"
@@ -122,7 +181,7 @@
 }
 
 @code {
-    private enum Sheet { None, Salary, Deduction, Planned }
+    private enum Sheet { None, Salary, Reserve, Deduction, Planned }
 
     private DateOnly Today => Clock.Today(); // never stored: the app may stay open across midnight
     private int offset; // months after the current one
@@ -130,6 +189,8 @@
     private Guid? editId;
     private string salary = "";
     private string? salaryError;
+    private string reserveInput = "";
+    private string? reserveError;
 
     private Budget Budget => State.Data.Budget;
     private DateOnly Month => new DateOnly(Today.Year, Today.Month, 1).AddMonths(offset);
@@ -152,6 +213,14 @@
         nextDue = offset == 0 ? overview.Deductions.FirstOrDefault(d => !d.Done) : null;
     }
 
+    private decimal FixedPaid => Math.Min(overview.FixedTotal, overview.Salary);
+    private decimal PlannedPaid => Math.Min(overview.PlannedTotal, overview.Salary - FixedPaid);
+
+    /// <summary>"Stand 14.10." in the month it was entered; later months show what is left when they start.</summary>
+    private string ReserveNote => Budget.Reserve is { AsOf: var asOf } && asOf.Year == Month.Year && asOf.Month == Month.Month
+        ? $"Stand {asOf.Day:00}.{asOf.Month:00}."
+        : $"Anfang {German.MonthName(Month.Month)}";
+
     /// <summary>Share of the salary, for the bar; capped at the whole bar when more is taken than earned.</summary>
     private string Percent(decimal amount)
     {
@@ -163,6 +232,7 @@
     {
         (sheet, editId) = (kind, id);
         if (kind == Sheet.Salary) (salary, salaryError) = (Budget.NetSalary > 0 ? Euro.ToInput(Budget.NetSalary) : "", null);
+        if (kind == Sheet.Reserve) (reserveInput, reserveError) = (Budget.Reserve is { } r ? Euro.ToInput(r.Amount) : "", null);
     }
 
     private void Close() => (sheet, editId) = (Sheet.None, null);
@@ -182,6 +252,23 @@
             return;
         }
         Budget.SetSalary(value);
+        Saved();
+    }
+
+    private void SaveReserve()
+    {
+        if (!Euro.TryParse(reserveInput, out var value))
+        {
+            reserveError = AmountField.Hint;
+            return;
+        }
+        Budget.SetReserve(value, Today);
+        Saved();
+    }
+
+    private void RemoveReserve()
+    {
+        Budget.RemoveReserve();
         Saved();
     }
 
