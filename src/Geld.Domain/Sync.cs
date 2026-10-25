@@ -56,13 +56,21 @@ public sealed record KindergeldChanges(KindergeldSettings? Settings, ItemChanges
 }
 
 /// <param name="NetSalary">null if unchanged.</param>
-public sealed record BudgetChanges(decimal? NetSalary, ItemChanges<Deduction> Deductions, ItemChanges<PlannedSpending> Planned)
+/// <param name="Reserve">
+/// null if unchanged. Optional, so that apps from before the Rücklage existed can still sync: they never send it, and
+/// so never remove it.
+/// </param>
+public sealed record BudgetChanges(
+    decimal? NetSalary, ItemChanges<Deduction> Deductions, ItemChanges<PlannedSpending> Planned, ReserveChange? Reserve = null)
 {
-    public bool IsEmpty => NetSalary is null && Deductions.IsEmpty && Planned.IsEmpty;
+    public bool IsEmpty => NetSalary is null && Deductions.IsEmpty && Planned.IsEmpty && Reserve is null;
 
-    internal BudgetChanges Union(BudgetChanges other) =>
-        new(NetSalary ?? other.NetSalary, Deductions.Union(other.Deductions), Planned.Union(other.Planned));
+    internal BudgetChanges Union(BudgetChanges other) => new(
+        NetSalary ?? other.NetSalary, Deductions.Union(other.Deductions), Planned.Union(other.Planned), Reserve ?? other.Reserve);
 }
+
+/// <param name="Value">The Rücklage now; null if it was removed.</param>
+public sealed record ReserveChange(Reserve? Value);
 
 /// <summary>
 /// The body of <c>POST /api/sync</c>: what changed on this phone since its last sync. The server applies it to the
@@ -70,8 +78,10 @@ public sealed record BudgetChanges(decimal? NetSalary, ItemChanges<Deduction> De
 /// </summary>
 /// <param name="Protocol">
 /// The shape of these requests and of the documents. Installed apps keep running an old version until they are
-/// restarted, and an old version would drop what it doesn't know when it sends data back; so the server refuses
-/// requests of another protocol. Raise <see cref="CurrentProtocol"/> whenever that shape changes.
+/// restarted, and an old version might drop what it doesn't know when it sends data back; so the server refuses
+/// requests of another protocol. Raise <see cref="CurrentProtocol"/> whenever that shape changes in a way older apps
+/// can't take part in. A new optional field that older apps neither send nor need doesn't count: they send changes,
+/// not documents, so they can't drop it.
 /// </param>
 /// <param name="UserId">
 /// The account the phone's data belongs to. The server refuses the request if someone else is signed in: the sign-in

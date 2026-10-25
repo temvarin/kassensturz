@@ -71,7 +71,7 @@ public sealed class DataStore(IKeyValueStore store)
         {
             var (pot, budget) = (data.Kindergeld, data.Budget);
             new KindergeldPot().Apply(new(new(pot.Children, pot.EndDigit), new(pot.Entries, [])));
-            new Budget().Apply(new(budget.NetSalary, new(budget.Deductions, []), new(budget.Planned, [])));
+            new Budget().Apply(new(budget.NetSalary, new(budget.Deductions, []), new(budget.Planned, []), new(budget.Reserve)));
             return true;
         }
         catch (ArgumentException)

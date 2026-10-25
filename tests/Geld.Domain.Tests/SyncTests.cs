@@ -349,6 +349,43 @@ public class SyncTests
     }
 
     [Fact]
+    public void The_reserve_reaches_the_owner_s_other_devices_and_so_does_its_removal()
+    {
+        var server = new Server();
+        var phone = new AppData();
+        var tablet = new AppData();
+        phone.Budget.SetReserve(2300, Today);
+
+        server.Sync("anna", phone);
+        server.Sync("anna", tablet);
+        Assert.Equal(new Reserve(2300, Today), tablet.Budget.Reserve);
+
+        tablet.Budget.RemoveReserve();
+        server.Sync("anna", tablet);
+        server.Sync("anna", phone);
+        Assert.Null(phone.Budget.Reserve);
+    }
+
+    [Fact]
+    public void A_sync_from_an_older_app_that_knows_no_reserve_leaves_it_alone()
+    {
+        var server = new Server();
+        var phone = new AppData();
+        phone.Budget.SetReserve(2300, Today);
+        server.Sync("anna", phone);
+        var older = phone.StartSync("anna").Request with
+        {
+            Budget = System.Text.Json.JsonSerializer.Deserialize(
+                """{"netSalary":2850,"deductions":{"changed":[],"removed":[]},"planned":{"changed":[],"removed":[]}}""",
+                ApiJson.Default.BudgetChanges)!,
+        };
+
+        server.Sync("anna", older);
+
+        Assert.Equal((2850m, new Reserve(2300, Today)), (server.Budgets["anna"].NetSalary, server.Budgets["anna"].Reserve));
+    }
+
+    [Fact]
     public void A_request_says_which_account_it_is_for()
     {
         Assert.Equal("anna", new AppData().StartSync("anna").Request.UserId);

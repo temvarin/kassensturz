@@ -32,6 +32,7 @@ public class DataStoreTests
         data.Budget.SetSalary(2850);
         var rent = data.Budget.AddDeduction("Miete", 1150, 1);
         var makeUp = data.Budget.Plan(2026, 10, "Make-up", 45);
+        data.Budget.SetReserve(2300, Today);
         data.MarkBackedUp(Today);
         new DataStore(memory).Save(data);
 
@@ -42,6 +43,7 @@ public class DataStoreTests
         Assert.Equal(2850m, loaded.Budget.NetSalary);
         Assert.Equal([rent], loaded.Budget.Deductions);
         Assert.Equal([makeUp], loaded.Budget.Planned);
+        Assert.Equal(new Reserve(2300, Today), loaded.Budget.Reserve);
         Assert.Equal(Today, loaded.LastBackup);
     }
 
@@ -80,6 +82,7 @@ public class DataStoreTests
     [InlineData("""{"schema":1,"data":{"kindergeld":null,"budget":null}}""")]
     [InlineData("""{"schema":1,"data":{"kindergeld":{"children":0},"budget":{}}}""")]
     [InlineData("""{"schema":1,"data":{"kindergeld":{},"budget":{"netSalary":-100}}}""")]
+    [InlineData("""{"schema":1,"data":{"kindergeld":{},"budget":{"reserve":{"amount":-1,"asOf":"2026-10-24"}}}}""")]
     [InlineData("""{"schema":1,"data":{"kindergeld":{"entries":[null]},"budget":{}}}""")]
     [InlineData("""{"schema":1,"data":{"kindergeld":{"entries":[{"id":"8c3f0b4e-1d2a-4c5b-9e6f-7a8b9c0d1e2f","kind":"Payment","date":"2026-10-14","amount":-518}]},"budget":{}}}""")]
     public void A_file_that_breaks_the_app_s_rules_is_rejected(string json) =>
