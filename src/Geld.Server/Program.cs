@@ -43,11 +43,17 @@ app.UseAuthorization();
 // The Blazor app's files, served with their pre-compressed variants and caching headers.
 app.MapStaticAssets();
 
-// Signed in is enough here: this is how a new user learns the id to put on the members list.
-app.MapGet("/api/whoami", async (ClaimsPrincipal user, IAuthorizationService authorization) => new WhoAmI(
-        user.FindFirstValue(ClaimTypes.NameIdentifier)!,
-        user.Identity?.Name ?? "",
-        (await authorization.AuthorizeAsync(user, Member)).Succeeded))
+// Signed in is enough here: this is how a new user learns the id to put on the members list. The app asks at every
+// start, which is when the sign-in is made to outlast closing the app.
+app.MapGet("/api/whoami", async (HttpContext context, IAuthorizationService authorization) =>
+    {
+        EasyAuth.KeepSession(context);
+        var user = context.User;
+        return new WhoAmI(
+            user.FindFirstValue(ClaimTypes.NameIdentifier)!,
+            user.Identity?.Name ?? "",
+            (await authorization.AuthorizeAsync(user, Member)).Succeeded);
+    })
     .RequireAuthorization();
 // Everything else under /api is for members only, including endpoints added later: Easy Auth lets everyone through
 // to this app (which must load without signing in), so this is the gate.

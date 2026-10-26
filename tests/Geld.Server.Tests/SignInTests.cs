@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using Geld.Domain;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Net.Http.Headers;
 
 namespace Geld.Server.Tests;
 
@@ -17,9 +18,9 @@ public class SignInTests(WebApplicationFactory<Program> factory) : IClassFixture
         {
             host.UseSetting("Geld:Members", members);
             if (easyAuth) host.UseSetting("WEBSITE_AUTH_ENABLED", "True");
-        }).CreateClient();
+        }).CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
 
-    private static async Task<HttpResponseMessage> Get(HttpClient server, string path, string? user)
+    private static async Task<HttpResponseMessage> Get(HttpClient server, string path, string? user, string? cookies = null)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(path, UriKind.Relative));
         if (user is not null)
@@ -27,6 +28,7 @@ public class SignInTests(WebApplicationFactory<Program> factory) : IClassFixture
             request.Headers.Add("X-MS-CLIENT-PRINCIPAL-ID", user);
             request.Headers.Add("X-MS-CLIENT-PRINCIPAL-NAME", $"{user}@example.com");
         }
+        if (cookies is not null) request.Headers.Add("Cookie", cookies);
         return await server.SendAsync(request);
     }
 
@@ -49,6 +51,29 @@ public class SignInTests(WebApplicationFactory<Program> factory) : IClassFixture
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(new WhoAmI(user, $"{user}@example.com", member), await response.Content.ReadFromJsonAsync(ApiJson.Default.WhoAmI));
+    }
+
+    [Fact]
+    public async Task The_session_cookie_comes_back_with_an_expiry_date_so_that_closing_the_app_keeps_the_sign_in()
+    {
+        const string session = "q8F+2b/x0=="; // Easy Auth's, which must come back exactly as it is
+
+        var response = await Get(Server(), "/api/whoami", Member, $"Other=1; AppServiceAuthSession={session}");
+
+        var cookie = Assert.Single(SetCookieHeaderValue.ParseList(response.Headers.GetValues("Set-Cookie").ToList()));
+        Assert.Equal(("AppServiceAuthSession", session, "/"), (cookie.Name.Value, cookie.Value.Value, cookie.Path.Value));
+        Assert.InRange(cookie.Expires!.Value, DateTimeOffset.UtcNow.AddDays(29), DateTimeOffset.UtcNow.AddDays(31));
+        Assert.True(cookie.HttpOnly && cookie.Secure);
+    }
+
+    [Theory]
+    [InlineData(null, "AppServiceAuthSession=q8F2bx0")] // Easy Auth refused the session: it stays refused
+    [InlineData(Member, "Other=1")]
+    public async Task Only_a_session_Easy_Auth_accepted_is_kept(string? user, string cookies)
+    {
+        var response = await Get(Server(), "/api/whoami", user, cookies);
+
+        Assert.False(response.Headers.Contains("Set-Cookie"));
     }
 
     [Theory]

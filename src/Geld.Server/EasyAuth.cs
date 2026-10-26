@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
+using Microsoft.Net.Http.Headers;
 
 namespace Geld.Server;
 
@@ -33,6 +34,32 @@ public sealed class EasyAuth(
         if (id.Length == 0 || !easyAuthOn) return Task.FromResult(AuthenticateResult.NoResult());
 
         return Task.FromResult(SignedIn(id, Request.Headers["X-MS-CLIENT-PRINCIPAL-NAME"].ToString()));
+    }
+
+    /// <summary>How long Easy Auth accepts a session: its setting <c>login.cookieExpiration</c>, fixed from the sign-in.</summary>
+    public static readonly TimeSpan SessionLifetime = TimeSpan.FromDays(30);
+
+    private const string SessionCookie = "AppServiceAuthSession";
+
+    /// <summary>
+    /// Easy Auth gives its session cookie no expiry date, so the browser deletes it when its session ends: on a phone,
+    /// when the installed app is closed. This sends the cookie back unchanged, with an expiry date, so that the phone
+    /// keeps it for as long as Easy Auth accepts it. Easy Auth still decides: it refuses a session older than
+    /// <see cref="SessionLifetime"/> and deletes the cookie then, as it does when signing out.
+    /// </summary>
+    public static void KeepSession(HttpContext context)
+    {
+        // The value as it came: ASP.NET's cookie collections decode and encode values, which could change it.
+        if (!CookieHeaderValue.TryParseList(context.Request.Headers.Cookie, out var cookies)) return;
+        if (cookies.FirstOrDefault(cookie => cookie.Name == SessionCookie) is not { } session) return;
+        context.Response.Headers.Append(HeaderNames.SetCookie, new SetCookieHeaderValue(SessionCookie, session.Value)
+        {
+            Path = "/",
+            Expires = DateTimeOffset.UtcNow + SessionLifetime,
+            Secure = true,
+            HttpOnly = true,
+            SameSite = Microsoft.Net.Http.Headers.SameSiteMode.Lax,
+        }.ToString());
     }
 
     private static AuthenticateResult SignedIn(string id, string name)
