@@ -1,0 +1,22 @@
+{
+  "children": 2,
+  "endDigit": 4,
+  "entries": [
+    {
+      "id": "fccbdb3a-d9dd-4679-8f26-228386a154eb",
+      "kind": "Spending",
+      "date": "2026-10-14",
+      "amount": 49.99,
+      "category": "Kleidung",
+      "note": "Winterjacke"
+    },
+    {
+      "id": "2964c699-b3b6-42ef-9e3e-fd1bc5d203bf",
+      "kind": "Payment",
+      "date": "2026-10-12",
+      "amount": 518,
+      "category": null,
+      "note": null
+    }
+  ]
+}

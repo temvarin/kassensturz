@@ -1,4 +1,4 @@
-namespace Geld.Domain;
+namespace Geld.Domain.Kindergeld;
 
 /// <summary>
 /// What the Familienkasse publishes once a year: the Kindergeld rate and the payment dates.

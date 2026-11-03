@@ -12,6 +12,17 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Using Include="Geld.Domain.Budgeting" />
+    <Using Include="Geld.Domain.Contracts" />
+    <Using Include="Geld.Domain.Kindergeld" />
+    <Using Include="Geld.Domain.SharedKernel" />
+    <Using Include="Geld.Domain.Sync" />
+    <Using Include="Geld.Domain.Storage" />
+  </ItemGroup>
+
+  <!-- What released versions wrote (ContractTests). -->
+  <ItemGroup>
+    <None Include="Contracts\**\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

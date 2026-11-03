@@ -1,0 +1,38 @@
+{
+  "protocol": 1,
+  "kindergeld": {
+    "settings": null,
+    "entries": {
+      "changed": [
+        {
+          "id": "cafa44d7-c039-4137-9686-2847eec1eab0",
+          "kind": "Spending",
+          "date": "2026-10-17",
+          "amount": 12.5,
+          "category": "Sonstiges",
+          "note": null
+        }
+      ],
+      "removed": [],
+      "isEmpty": false
+    },
+    "isEmpty": false
+  },
+  "budget": {
+    "netSalary": 2900,
+    "deductions": {
+      "changed": [],
+      "removed": [
+        "4c210059-7ce1-46e2-8745-eaf4f301de28"
+      ],
+      "isEmpty": false
+    },
+    "planned": {
+      "changed": [],
+      "removed": [],
+      "isEmpty": true
+    },
+    "isEmpty": false
+  },
+  "isEmpty": false
+}

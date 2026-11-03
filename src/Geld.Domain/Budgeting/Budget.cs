@@ -1,6 +1,6 @@
-using System.Text.Json.Serialization;
+using Geld.Domain.SharedKernel;
 
-namespace Geld.Domain;
+namespace Geld.Domain.Budgeting;
 
 /// <summary>A fixed cost taken from the salary every month, e.g. rent or a subscription.</summary>
 /// <param name="Day">Day of the month it is debited, 1–31; in shorter months the last day.</param>
@@ -44,21 +44,46 @@ public sealed record MonthOverview(
     public decimal? ReserveAfter => ReserveAtStart - FromReserve;
 }
 
+/// <summary>The budget for reading: everything it shows and computes, nothing that changes it.</summary>
+public interface IReadOnlyBudget
+{
+    decimal NetSalary { get; }
+    IReadOnlyList<Deduction> Deductions { get; }
+    IReadOnlyList<PlannedSpending> Planned { get; }
+    Reserve? Reserve { get; }
+    MonthOverview Overview(int year, int month, DateOnly today);
+}
+
 /// <summary>
 /// The monthly budget: one net salary, fixed costs that recur every month, and spendings planned for single months.
 /// There is no history: a changed salary or rent applies to every month, which is why only the current and
-/// later months are shown. Persisted as part of <see cref="AppData"/>.
+/// later months are shown. Persisted as part of <see cref="AppData"/>, in the shape of Contracts.BudgetJson.
 /// </summary>
-/// <remarks>State changes only through its methods; the internal setters exist for deserialization.</remarks>
-public sealed class Budget
+/// <remarks>State changes only through its methods, which keep its rules.</remarks>
+public sealed class Budget : IReadOnlyBudget
 {
-    [JsonInclude] public decimal NetSalary { get; internal set; }
+    public Budget()
+    {
+    }
+
+    /// <summary>A budget as it was saved, restored by the same rules as entering it: a budget that exists keeps them.</summary>
+    /// <exception cref="ArgumentException">Something breaks the rules, e.g. a day 32 or an id twice.</exception>
+    /// <param name="planned">In the order they were added, as <see cref="Planned"/>.</param>
+    public Budget(decimal netSalary, IEnumerable<Deduction> deductions, IEnumerable<PlannedSpending> planned, Reserve? reserve)
+    {
+        SetSalary(netSalary);
+        Deductions = Sorted(deductions.Valid(Valid));
+        Planned = planned.Valid(Valid);
+        Reserve = reserve is null ? null : Valid(reserve);
+    }
+
+    public decimal NetSalary { get; private set; }
 
     /// <summary>In the order they are debited.</summary>
-    [JsonInclude] public IReadOnlyList<Deduction> Deductions { get; internal set; } = [];
+    public IReadOnlyList<Deduction> Deductions { get; private set; } = [];
 
     /// <summary>In the order they were added.</summary>
-    [JsonInclude] public IReadOnlyList<PlannedSpending> Planned { get; internal set; } = [];
+    public IReadOnlyList<PlannedSpending> Planned { get; private set; } = [];
 
     /// <summary>
     /// The Rücklage: money besides the salary, e.g. on a savings account; null if not entered. A month that costs more
@@ -66,11 +91,11 @@ public sealed class Budget
     /// the app can't know whether they were saved or spent on everyday things; the user enters the amount anew now
     /// and then instead.
     /// </summary>
-    [JsonInclude] public Reserve? Reserve { get; internal set; }
+    public Reserve? Reserve { get; private set; }
 
     public void SetSalary(decimal netSalary)
     {
-        ArgumentOutOfRangeException.ThrowIfNegative(netSalary);
+        if (!BudgetRules.IsSalary(netSalary)) throw new ArgumentOutOfRangeException(nameof(netSalary), netSalary, "Must not be negative.");
         NetSalary = netSalary;
     }
 
@@ -101,31 +126,10 @@ public sealed class Budget
 
     public void RemoveReserve() => Reserve = null;
 
-    /// <summary>What changed since <paramref name="before"/>, for the next sync.</summary>
-    public BudgetChanges ChangesSince(Budget before) => new(
-        NetSalary == before.NetSalary ? null : NetSalary,
-        ItemChanges.Between(before.Deductions, Deductions),
-        ItemChanges.Between(before.Planned, Planned),
-        Reserve == before.Reserve ? null : new ReserveChange(Reserve));
+    public MonthOverview Overview(int year, int month, DateOnly today) =>
+        WithoutReserve(year, month, today) with { ReserveAtStart = ReserveAt(new DateOnly(year, month, 1), today) };
 
-    /// <summary>The salary and items that <paramref name="touched"/> is about, as they are now.</summary>
-    internal BudgetChanges Now(BudgetChanges touched) =>
-        new(touched.NetSalary is null ? null : NetSalary, touched.Deductions.Now(Deductions), touched.Planned.Now(Planned),
-            touched.Reserve is null ? null : new ReserveChange(Reserve));
-
-    /// <summary>Takes over changes made on another device. All or nothing: throws if any of them breaks the rules.</summary>
-    public void Apply(BudgetChanges changes)
-    {
-        var deductions = changes.Deductions.ApplyTo(Deductions, Valid);
-        var planned = changes.Planned.ApplyTo(Planned, Valid);
-        var reserve = changes.Reserve is { Value: { } r } ? Valid(r) : null;
-        if (changes.NetSalary is { } salary) SetSalary(salary);
-        if (changes.Reserve is not null) Reserve = reserve;
-        Deductions = Sorted([.. deductions.Kept, .. deductions.Added]);
-        Planned = [.. planned.Kept, .. planned.Added];
-    }
-
-    public MonthOverview Overview(int year, int month, DateOnly today)
+    private MonthOverview WithoutReserve(int year, int month, DateOnly today)
     {
         var lastDay = DateTime.DaysInMonth(year, month);
         return new MonthOverview(year, month, NetSalary,
@@ -134,26 +138,26 @@ public sealed class Budget
                 var date = new DateOnly(year, month, Math.Min(d.Day, lastDay));
                 return new DeductionLine(d, date, date <= today);
             })],
-            [.. Planned.Where(p => p.Year == year && p.Month == month)],
-            ReserveAt(new DateOnly(year, month, 1)));
+            [.. Planned.Where(p => p.Year == year && p.Month == month)]);
     }
 
-    // What is left of the Rücklage when a month starts: the months since it was entered draw their shortfalls from it.
-    private decimal? ReserveAt(DateOnly month)
+    // What is left of the Rücklage when a month starts: the months since it was entered draw their shortfalls from it,
+    // each computed as the month's own overview computes it.
+    private decimal? ReserveAt(DateOnly month, DateOnly today)
     {
         if (Reserve is not { } reserve) return null;
         var left = reserve.Amount;
         for (var m = new DateOnly(reserve.AsOf.Year, reserve.AsOf.Month, 1); m < month; m = m.AddMonths(1))
-        {
-            var available = NetSalary - Deductions.Sum(d => d.Amount) - Planned.Where(p => p.Year == m.Year && p.Month == m.Month).Sum(p => p.Amount);
-            left = Math.Max(0, left + Math.Min(0, available));
-        }
+            left = Math.Max(0, left - WithoutReserve(m.Year, m.Month, today).Shortfall);
         return left;
     }
 
+    /// <summary>An independent copy, e.g. the base of a sync. Items are values and lists are replaced, never changed.</summary>
+    public Budget Copy() => new() { NetSalary = NetSalary, Deductions = Deductions, Planned = Planned, Reserve = Reserve };
+
     private static Deduction Valid(Deduction d)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(d.Amount);
+        if (!BudgetRules.IsAmount(d.Amount)) throw new ArgumentOutOfRangeException(nameof(d), d.Amount, "The amount must be positive.");
         ArgumentOutOfRangeException.ThrowIfLessThan(d.Day, 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(d.Day, 31);
         return d with { Name = d.Name.Required(nameof(d.Name)) };
@@ -161,14 +165,14 @@ public sealed class Budget
 
     private static PlannedSpending Valid(PlannedSpending p)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(p.Amount);
+        if (!BudgetRules.IsAmount(p.Amount)) throw new ArgumentOutOfRangeException(nameof(p), p.Amount, "The amount must be positive.");
         _ = new DateOnly(p.Year, p.Month, 1); // throws for a month that doesn't exist
         return p with { Name = p.Name.Required(nameof(p.Name)) };
     }
 
     private static Reserve Valid(Reserve reserve)
     {
-        ArgumentOutOfRangeException.ThrowIfNegative(reserve.Amount);
+        if (!BudgetRules.IsReserve(reserve.Amount)) throw new ArgumentOutOfRangeException(nameof(reserve), reserve.Amount, "Must not be negative.");
         return reserve;
     }
 

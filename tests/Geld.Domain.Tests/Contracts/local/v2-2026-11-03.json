@@ -1,0 +1,139 @@
+{
+  "schema": 2,
+  "data": {
+    "kindergeld": {
+      "children": 3,
+      "endDigit": 4,
+      "entries": [
+        {
+          "id": "39931c3a-cc35-4db7-8e50-2645ee5fc17e",
+          "kind": "Spending",
+          "date": "2026-10-24",
+          "amount": 12.5,
+          "category": "Sonstiges"
+        },
+        {
+          "id": "ae0f8827-6da7-4e27-9b0d-c9a29083c3b2",
+          "kind": "Spending",
+          "date": "2026-10-14",
+          "amount": 49.99,
+          "category": "Kleidung",
+          "note": "Winterjacke"
+        },
+        {
+          "id": "0e1f3d6c-6f9e-4d6d-b6b4-01b7e4501e84",
+          "kind": "Payment",
+          "date": "2026-10-12",
+          "amount": 518
+        }
+      ]
+    },
+    "budget": {
+      "netSalary": 2850,
+      "deductions": [
+        {
+          "id": "b7a329b6-836c-49c9-9d26-54f7ce962e39",
+          "name": "Miete",
+          "amount": 1150,
+          "day": 1
+        }
+      ],
+      "planned": [],
+      "reserve": {
+        "amount": 2150,
+        "asOf": "2026-10-25"
+      }
+    },
+    "lastBackup": "2026-10-15",
+    "sync": {
+      "userId": "8a1c0e52",
+      "lastSync": "2026-10-25T07:45:00+00:00",
+      "kindergeld": {
+        "children": 2,
+        "endDigit": 4,
+        "entries": [
+          {
+            "id": "ae0f8827-6da7-4e27-9b0d-c9a29083c3b2",
+            "kind": "Spending",
+            "date": "2026-10-14",
+            "amount": 49.99,
+            "category": "Kleidung",
+            "note": "Winterjacke"
+          },
+          {
+            "id": "0e1f3d6c-6f9e-4d6d-b6b4-01b7e4501e84",
+            "kind": "Payment",
+            "date": "2026-10-12",
+            "amount": 518
+          }
+        ]
+      },
+      "budget": {
+        "netSalary": 2850,
+        "deductions": [
+          {
+            "id": "b7a329b6-836c-49c9-9d26-54f7ce962e39",
+            "name": "Miete",
+            "amount": 1150,
+            "day": 1
+          },
+          {
+            "id": "7f9c70f9-c3cc-4558-b7c3-20623773def0",
+            "name": "Handy",
+            "amount": 19.99,
+            "day": 15
+          }
+        ],
+        "planned": [
+          {
+            "id": "b12cadf9-9224-41b8-be7e-6697c30730e9",
+            "year": 2026,
+            "month": 10,
+            "name": "Make-up",
+            "amount": 45
+          }
+        ],
+        "reserve": {
+          "amount": 2300,
+          "asOf": "2026-10-24"
+        }
+      }
+    },
+    "unconfirmed": {
+      "protocol": 3,
+      "kindergeld": {
+        "entries": {
+          "changed": [
+            {
+              "id": "39931c3a-cc35-4db7-8e50-2645ee5fc17e",
+              "kind": "Spending",
+              "date": "2026-10-24",
+              "amount": 12.5,
+              "category": "Sonstiges"
+            }
+          ],
+          "removed": [],
+          "isEmpty": false
+        },
+        "isEmpty": false
+      },
+      "budget": {
+        "deductions": {
+          "changed": [],
+          "removed": [
+            "7f9c70f9-c3cc-4558-b7c3-20623773def0"
+          ],
+          "isEmpty": false
+        },
+        "planned": {
+          "changed": [],
+          "removed": [],
+          "isEmpty": true
+        },
+        "isEmpty": false
+      },
+      "userId": "8a1c0e52",
+      "isEmpty": false
+    }
+  }
+}

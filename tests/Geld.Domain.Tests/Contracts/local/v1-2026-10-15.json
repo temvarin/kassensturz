@@ -1,0 +1,58 @@
+{
+  "schema": 1,
+  "data": {
+    "kindergeld": {
+      "children": 2,
+      "endDigit": 4,
+      "entries": [
+        {
+          "id": "d3069f3d-3dc3-468e-9e95-45744f03ef3b",
+          "kind": "Spending",
+          "date": "2026-10-15",
+          "amount": 12.5,
+          "category": "Sonstiges"
+        },
+        {
+          "id": "08219fa3-84a8-4538-8cb8-37f1a482c830",
+          "kind": "Spending",
+          "date": "2026-10-14",
+          "amount": 49.99,
+          "category": "Kleidung",
+          "note": "Winterjacke"
+        },
+        {
+          "id": "f60ca508-0762-40de-a3ce-fa2f5da7e2ea",
+          "kind": "Payment",
+          "date": "2026-10-12",
+          "amount": 518
+        }
+      ]
+    },
+    "budget": {
+      "netSalary": 2850,
+      "deductions": [
+        {
+          "id": "8a824d90-cd4a-4c0d-a2ed-ea966aceea3b",
+          "name": "Miete",
+          "amount": 1150,
+          "day": 1
+        },
+        {
+          "id": "4a80c2c8-845c-4ed2-87d3-d8a80739eb87",
+          "name": "Handy",
+          "amount": 19.99,
+          "day": 15
+        }
+      ],
+      "planned": [
+        {
+          "id": "96676970-5cea-4755-b1d4-c042856b0afd",
+          "year": 2026,
+          "month": 10,
+          "name": "Make-up",
+          "amount": 45
+        }
+      ]
+    }
+  }
+}

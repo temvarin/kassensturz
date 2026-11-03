@@ -10,32 +10,37 @@ public class SyncTests
     /// <summary>What <c>POST /api/sync</c> does with the documents, minus the database. Answers through JSON, like the network.</summary>
     private sealed class Server
     {
-        public KindergeldPot Kindergeld { get; } = new();
+        public KindergeldPot Kindergeld { get; private set; } = new();
         public Dictionary<string, Budget> Budgets { get; } = [];
 
         public SyncResponse Sync(string user, SyncRequest request)
         {
-            var budget = Budgets.TryGetValue(user, out var b) ? b : Budgets[user] = new Budget();
-            Kindergeld.Apply(request.Kindergeld);
-            budget.Apply(request.Budget);
+            Kindergeld = KindergeldSync.Apply(Kindergeld, request.Kindergeld);
+            var budget = Budgets[user] = BudgetSync.Apply(Budgets.GetValueOrDefault(user) ?? new Budget(), request.Budget);
             return Network(new SyncResponse(Kindergeld, budget));
         }
 
         public void Sync(string user, AppData phone)
         {
-            var pending = phone.StartSync(user);
-            phone.CompleteSync(pending, Sync(user, Network(pending.Request)), Now);
+            var pending = phone.Synced.StartSync(user);
+            phone.Synced.CompleteSync(pending, Sync(user, Network(pending.Request)), Now);
         }
     }
 
-    private static T Network<T>(T value)
-    {
-        var type = (System.Text.Json.Serialization.Metadata.JsonTypeInfo<T>)ApiJson.Default.GetTypeInfo(typeof(T))!;
-        return JsonSerializer.Deserialize(JsonSerializer.Serialize(value, type), type)!;
-    }
+    // Through the JSON and its mappers, like the network.
+    private static SyncRequest Network(SyncRequest request) => JsonSerializer.Deserialize(
+        JsonSerializer.Serialize(SyncRequestJson.From(request), ApiJson.Default.SyncRequestJson), ApiJson.Default.SyncRequestJson)!.ToDomain();
 
-    private static string Json(KindergeldPot pot) => JsonSerializer.Serialize(pot, ApiJson.Default.KindergeldPot);
-    private static string Json(Budget budget) => JsonSerializer.Serialize(budget, ApiJson.Default.Budget);
+    private static SyncResponse Network(SyncResponse response) => JsonSerializer.Deserialize(
+        JsonSerializer.Serialize(SyncResponseJson.From(response), ApiJson.Default.SyncResponseJson), ApiJson.Default.SyncResponseJson)!.ToDomain();
+
+    private static KindergeldPot Network(KindergeldPot pot) =>
+        JsonSerializer.Deserialize(Json(pot), ApiJson.Default.KindergeldJson)!.ToDomain();
+
+    private static Budget Network(Budget budget) => JsonSerializer.Deserialize(Json(budget), ApiJson.Default.BudgetJson)!.ToDomain();
+
+    private static string Json(KindergeldPot pot) => JsonSerializer.Serialize(KindergeldJson.From(pot), ApiJson.Default.KindergeldJson);
+    private static string Json(Budget budget) => JsonSerializer.Serialize(BudgetJson.From(budget), ApiJson.Default.BudgetJson);
 
     [Fact]
     public void The_changes_are_what_was_added_edited_and_removed_since_the_base()
@@ -49,7 +54,7 @@ public class SyncTests
         after.Update(edited with { Amount = 25 });
         after.Remove(removed.Id);
 
-        var changes = after.ChangesSince(before).Entries;
+        var changes = KindergeldSync.Diff(before, after).Entries;
 
         Assert.Equal([added, edited with { Amount = 25 }], changes.Changed);
         Assert.Equal([removed.Id], changes.Removed);
@@ -61,11 +66,11 @@ public class SyncTests
     {
         var before = new KindergeldPot();
         var after = Network(before);
-        Assert.Null(after.ChangesSince(before).Settings);
+        Assert.Null(KindergeldSync.Diff(before, after).Settings);
 
         after.Configure(children: 2, endDigit: 4);
 
-        Assert.Equal(new KindergeldSettings(2, 4), after.ChangesSince(before).Settings);
+        Assert.Equal(new KindergeldSettings(2, 4), KindergeldSync.Diff(before, after).Settings);
     }
 
     [Fact]
@@ -73,12 +78,12 @@ public class SyncTests
     {
         var phone = new KindergeldPot();
         phone.Receive(Today, 518);
-        var changes = phone.ChangesSince(new KindergeldPot());
+        var changes = KindergeldSync.Diff(new KindergeldPot(), phone);
         var server = new KindergeldPot();
 
-        server.Apply(changes);
+        server = KindergeldSync.Apply(server, changes);
         var once = Json(server);
-        server.Apply(changes); // a retry after a timeout, when the first request did arrive
+        server = KindergeldSync.Apply(server, changes); // a retry after a timeout, when the first request did arrive
 
         Assert.Equal(once, Json(server));
     }
@@ -173,7 +178,7 @@ public class SyncTests
         var server = new KindergeldPot();
         server.Receive(Today, 518);
 
-        server.Apply(new KindergeldChanges(null, new ItemChanges<Entry>([], [Guid.NewGuid()])));
+        server = KindergeldSync.Apply(server, new KindergeldChanges(null, new ItemChanges<Entry>([], [Guid.NewGuid()])));
 
         Assert.Single(server.Entries);
     }
@@ -187,7 +192,7 @@ public class SyncTests
         var shoes = phone.Spend(Today, 35, "Kleidung");
         var september = phone.Receive(Today.AddMonths(-1), 518);
 
-        server.Apply(phone.ChangesSince(new KindergeldPot()));
+        server = KindergeldSync.Apply(server, KindergeldSync.Diff(new KindergeldPot(), phone));
 
         Assert.Equal([shoes, october, september], server.Entries);
     }
@@ -200,7 +205,7 @@ public class SyncTests
             [new Entry(Guid.NewGuid(), EntryKind.Payment, Today, 518, null, null),
              new Entry(Guid.NewGuid(), EntryKind.Spending, Today, -50, "Kleidung", null)], []));
 
-        Assert.ThrowsAny<ArgumentException>(() => server.Apply(invalid));
+        Assert.ThrowsAny<ArgumentException>(() => KindergeldSync.Apply(server, invalid));
 
         Assert.Equal(Json(new KindergeldPot()), Json(server));
     }
@@ -224,7 +229,7 @@ public class SyncTests
     }
 
     [Fact]
-    public void Budget_changes_keep_the_budget_s_order_and_send_the_salary_only_when_it_changed()
+    public void Budget_changes_keep_the_budget_s_order_and_send_the_settings_only_when_they_changed()
     {
         var before = new Budget();
         before.SetSalary(2850);
@@ -235,10 +240,10 @@ public class SyncTests
         var rent = server.AddDeduction("Miete", 1150, 1);
         var gift = server.Plan(2026, 10, "Geschenk", 30);
 
-        var changes = phone.ChangesSince(before);
-        server.Apply(changes);
+        var changes = BudgetSync.Diff(before, phone);
+        server = BudgetSync.Apply(server, changes);
 
-        Assert.Null(changes.NetSalary);
+        Assert.Null(changes.Settings);
         Assert.Equal([rent, gym], server.Deductions); // by day
         Assert.Equal([gift, makeUp], server.Planned); // in the order added
     }
@@ -264,16 +269,16 @@ public class SyncTests
         var server = new Server();
         var phone = new AppData();
         phone.Kindergeld.Receive(Today, 518);
-        var pending = phone.StartSync("anna");
+        var pending = phone.Synced.StartSync("anna");
         var shoes = phone.Kindergeld.Spend(Today, 35, "Kleidung");
 
-        phone.CompleteSync(pending, server.Sync("anna", pending.Request), Now);
+        phone.Synced.CompleteSync(pending, server.Sync("anna", pending.Request), Now);
 
         Assert.Contains(shoes, phone.Kindergeld.Entries);
-        Assert.True(phone.HasUnsyncedChanges);
+        Assert.True(phone.Synced.HasUnsyncedChanges);
         server.Sync("anna", phone);
         Assert.Contains(shoes, server.Kindergeld.Entries);
-        Assert.False(phone.HasUnsyncedChanges);
+        Assert.False(phone.Synced.HasUnsyncedChanges);
     }
 
     [Fact]
@@ -284,10 +289,10 @@ public class SyncTests
         var payment = phone.Kindergeld.Receive(Today, 518);
         server.Sync("anna", phone);
         phone.Kindergeld.Update(payment with { Amount = 259 });
-        var pending = phone.StartSync("anna");
+        var pending = phone.Synced.StartSync("anna");
         phone.Kindergeld.Update(payment);
 
-        phone.CompleteSync(pending, server.Sync("anna", pending.Request), Now);
+        phone.Synced.CompleteSync(pending, server.Sync("anna", pending.Request), Now);
         server.Sync("anna", phone);
 
         Assert.Equal(518m, Assert.Single(server.Kindergeld.Entries).Amount);
@@ -298,11 +303,11 @@ public class SyncTests
     public void A_sync_remembers_the_account_and_when_it_happened()
     {
         var phone = new AppData();
-        Assert.True(phone.HasUnsyncedChanges is false && phone.Sync is null);
+        Assert.True(phone.Synced.HasUnsyncedChanges is false && phone.Synced.State is null);
 
         new Server().Sync("anna", phone);
 
-        Assert.Equal(("anna", Now), (phone.Sync?.UserId, phone.Sync?.LastSync));
+        Assert.Equal(("anna", Now), (phone.Synced.State?.UserId, phone.Synced.State?.LastSync));
     }
 
     [Fact]
@@ -312,7 +317,7 @@ public class SyncTests
         var server = new Server();
         server.Sync("anna", phone);
 
-        Assert.Throws<InvalidOperationException>(() => phone.StartSync("ben"));
+        Assert.Throws<InvalidOperationException>(() => phone.Synced.StartSync("ben"));
     }
 
     [Fact]
@@ -329,7 +334,7 @@ public class SyncTests
         server.Sync("anna", phone);
 
         Assert.Equal([shoes, payment], server.Kindergeld.Entries);
-        Assert.Equal("anna", phone.Sync?.UserId);
+        Assert.Equal("anna", phone.Synced.State?.UserId);
     }
 
     [Fact]
@@ -342,10 +347,10 @@ public class SyncTests
         var stored = DataStore.TryRead(DataStore.Serialize(phone));
         var backup = DataStore.TryRead(DataStore.Backup(phone, Today));
 
-        Assert.Equal("anna", stored?.Sync?.UserId);
-        Assert.False(stored?.HasUnsyncedChanges);
-        Assert.Null(backup?.Sync);
-        Assert.NotNull(phone.Sync);
+        Assert.Equal("anna", stored?.Synced.State?.UserId);
+        Assert.False(stored?.Synced.HasUnsyncedChanges);
+        Assert.Null(backup?.Synced.State);
+        Assert.NotNull(phone.Synced.State);
     }
 
     [Fact]
@@ -367,28 +372,30 @@ public class SyncTests
     }
 
     [Fact]
-    public void A_sync_from_an_older_app_that_knows_no_reserve_leaves_it_alone()
+    public void The_salary_and_the_reserve_travel_together_and_the_settings_the_server_receives_last_win_whole()
     {
+        // The trade-off of syncing settings as one record (protocol 3): two of one user's devices that change different
+        // settings at the same moment are one conflict, as two edits of one item are.
         var server = new Server();
         var phone = new AppData();
-        phone.Budget.SetReserve(2300, Today);
+        phone.Budget.SetSalary(2850);
         server.Sync("anna", phone);
-        var older = phone.StartSync("anna").Request with
-        {
-            Budget = System.Text.Json.JsonSerializer.Deserialize(
-                """{"netSalary":2850,"deductions":{"changed":[],"removed":[]},"planned":{"changed":[],"removed":[]}}""",
-                ApiJson.Default.BudgetChanges)!,
-        };
+        var tablet = new AppData();
+        server.Sync("anna", tablet);
 
-        server.Sync("anna", older);
+        phone.Budget.SetSalary(2900);
+        tablet.Budget.SetReserve(2300, Today);
+        server.Sync("anna", phone);
+        server.Sync("anna", tablet);
 
-        Assert.Equal((2850m, new Reserve(2300, Today)), (server.Budgets["anna"].NetSalary, server.Budgets["anna"].Reserve));
+        Assert.Equal(new BudgetSettings(2850, new Reserve(2300, Today)),
+            new BudgetSettings(server.Budgets["anna"].NetSalary, server.Budgets["anna"].Reserve));
     }
 
     [Fact]
     public void A_request_says_which_account_it_is_for()
     {
-        Assert.Equal("anna", new AppData().StartSync("anna").Request.UserId);
+        Assert.Equal("anna", new AppData().Synced.StartSync("anna").Request.UserId);
     }
 
     [Fact]
@@ -398,9 +405,9 @@ public class SyncTests
         var server = new Server();
         var phone = new AppData();
         var shoes = phone.Kindergeld.Spend(Today, 35, "Kleidung");
-        var lost = phone.StartSync("anna");
+        var lost = phone.Synced.StartSync("anna");
         server.Sync("anna", Network(lost.Request));
-        phone.SyncFailed(lost);
+        phone.Synced.SyncFailed(lost);
         phone.Kindergeld.Remove(shoes.Id); // while waiting for the retry
 
         phone = DataStore.TryRead(DataStore.Serialize(phone))!; // the app may also have been restarted meanwhile
@@ -408,7 +415,7 @@ public class SyncTests
 
         Assert.Empty(server.Kindergeld.Entries);
         Assert.Empty(phone.Kindergeld.Entries);
-        Assert.False(phone.HasUnsyncedChanges);
+        Assert.False(phone.Synced.HasUnsyncedChanges);
     }
 
     [Fact]
@@ -422,9 +429,9 @@ public class SyncTests
         phone.Kindergeld.Update(payment with { Amount = 259 });
         phone.Kindergeld.Configure(children: 2, endDigit: 4);
         phone.Budget.SetSalary(3000);
-        var lost = phone.StartSync("anna");
+        var lost = phone.Synced.StartSync("anna");
         server.Sync("anna", Network(lost.Request));
-        phone.SyncFailed(lost);
+        phone.Synced.SyncFailed(lost);
         phone.Kindergeld.Update(payment);
         phone.Kindergeld.Configure(children: 1, endDigit: null);
         phone.Budget.SetSalary(2850);
@@ -441,10 +448,10 @@ public class SyncTests
     {
         var phone = new AppData();
         phone.Kindergeld.Receive(Today, 518);
-        phone.SyncFailed(phone.StartSync("anna"));
+        phone.Synced.SyncFailed(phone.Synced.StartSync("anna"));
 
-        Assert.True(phone.HasUnsyncedChanges);
-        Assert.Null(DataStore.TryRead(DataStore.Backup(phone, Today))?.Unconfirmed);
+        Assert.True(phone.Synced.HasUnsyncedChanges);
+        Assert.Null(DataStore.TryRead(DataStore.Backup(phone, Today))?.Synced.Unconfirmed);
     }
 
     [Fact]
@@ -466,12 +473,12 @@ public class SyncTests
                 switch (random.Next(3))
                 {
                     case 0 when inFlight[d] is null:
-                        var pending = phone.StartSync(user);
+                        var pending = phone.Synced.StartSync(user);
                         inFlight[d] = (pending, server.Sync(user, Network(pending.Request)));
                         break;
                     case 1 when inFlight[d] is { } sync:
-                        if (random.Next(4) == 0) phone.SyncFailed(sync.Sent); // the answer got lost
-                        else phone.CompleteSync(sync.Sent, sync.Answer, Now);
+                        if (random.Next(4) == 0) phone.Synced.SyncFailed(sync.Sent); // the answer got lost
+                        else phone.Synced.CompleteSync(sync.Sent, sync.Answer, Now);
                         inFlight[d] = null;
                         break;
                     default:
@@ -481,7 +488,7 @@ public class SyncTests
             }
             for (var d = 0; d < devices.Length; d++)
             {
-                if (inFlight[d] is { } sync) devices[d].Item2.CompleteSync(sync.Sent, sync.Answer, Now);
+                if (inFlight[d] is { } sync) devices[d].Item2.Synced.CompleteSync(sync.Sent, sync.Answer, Now);
             }
             for (var round = 0; round < 2; round++)
             {
@@ -492,7 +499,7 @@ public class SyncTests
             {
                 Assert.Equal(Json(server.Kindergeld), Json(phone.Kindergeld));
                 Assert.Equal(Json(server.Budgets[user]), Json(phone.Budget));
-                Assert.False(phone.HasUnsyncedChanges);
+                Assert.False(phone.Synced.HasUnsyncedChanges);
             }
         }
     }

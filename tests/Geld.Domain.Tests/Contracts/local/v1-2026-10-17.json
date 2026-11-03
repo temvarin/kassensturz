@@ -1,0 +1,103 @@
+{
+  "schema": 1,
+  "data": {
+    "kindergeld": {
+      "children": 2,
+      "endDigit": 4,
+      "entries": [
+        {
+          "id": "cafa44d7-c039-4137-9686-2847eec1eab0",
+          "kind": "Spending",
+          "date": "2026-10-17",
+          "amount": 12.5,
+          "category": "Sonstiges"
+        },
+        {
+          "id": "fccbdb3a-d9dd-4679-8f26-228386a154eb",
+          "kind": "Spending",
+          "date": "2026-10-14",
+          "amount": 49.99,
+          "category": "Kleidung",
+          "note": "Winterjacke"
+        },
+        {
+          "id": "2964c699-b3b6-42ef-9e3e-fd1bc5d203bf",
+          "kind": "Payment",
+          "date": "2026-10-12",
+          "amount": 518
+        }
+      ]
+    },
+    "budget": {
+      "netSalary": 2900,
+      "deductions": [
+        {
+          "id": "2b9937d7-677d-40a2-9c47-9554b3819400",
+          "name": "Miete",
+          "amount": 1150,
+          "day": 1
+        }
+      ],
+      "planned": [
+        {
+          "id": "c652cf63-95b0-4a07-9a95-a66f01c502ca",
+          "year": 2026,
+          "month": 10,
+          "name": "Make-up",
+          "amount": 45
+        }
+      ]
+    },
+    "lastBackup": "2026-10-15",
+    "sync": {
+      "userId": "8a1c0e52",
+      "lastSync": "2026-10-17T18:30:00+00:00",
+      "kindergeld": {
+        "children": 2,
+        "endDigit": 4,
+        "entries": [
+          {
+            "id": "fccbdb3a-d9dd-4679-8f26-228386a154eb",
+            "kind": "Spending",
+            "date": "2026-10-14",
+            "amount": 49.99,
+            "category": "Kleidung",
+            "note": "Winterjacke"
+          },
+          {
+            "id": "2964c699-b3b6-42ef-9e3e-fd1bc5d203bf",
+            "kind": "Payment",
+            "date": "2026-10-12",
+            "amount": 518
+          }
+        ]
+      },
+      "budget": {
+        "netSalary": 2850,
+        "deductions": [
+          {
+            "id": "2b9937d7-677d-40a2-9c47-9554b3819400",
+            "name": "Miete",
+            "amount": 1150,
+            "day": 1
+          },
+          {
+            "id": "4c210059-7ce1-46e2-8745-eaf4f301de28",
+            "name": "Handy",
+            "amount": 19.99,
+            "day": 15
+          }
+        ],
+        "planned": [
+          {
+            "id": "c652cf63-95b0-4a07-9a95-a66f01c502ca",
+            "year": 2026,
+            "month": 10,
+            "name": "Make-up",
+            "amount": 45
+          }
+        ]
+      }
+    }
+  }
+}

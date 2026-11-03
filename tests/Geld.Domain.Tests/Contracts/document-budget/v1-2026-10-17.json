@@ -1,0 +1,26 @@
+{
+  "netSalary": 2850,
+  "deductions": [
+    {
+      "id": "2b9937d7-677d-40a2-9c47-9554b3819400",
+      "name": "Miete",
+      "amount": 1150,
+      "day": 1
+    },
+    {
+      "id": "4c210059-7ce1-46e2-8745-eaf4f301de28",
+      "name": "Handy",
+      "amount": 19.99,
+      "day": 15
+    }
+  ],
+  "planned": [
+    {
+      "id": "c652cf63-95b0-4a07-9a95-a66f01c502ca",
+      "year": 2026,
+      "month": 10,
+      "name": "Make-up",
+      "amount": 45
+    }
+  ]
+}
