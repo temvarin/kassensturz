@@ -1,8 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
-using Geld.Domain;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Time.Testing;
 using Microsoft.Net.Http.Headers;
 
 namespace Geld.Server.Tests;
@@ -13,11 +15,14 @@ public class SignInTests(WebApplicationFactory<Program> factory) : IClassFixture
     private const string Member = "8a1c0e52-member";
     private const string Stranger = "f39b77d0-stranger";
 
+    private readonly FakeTimeProvider clock = new(new DateTimeOffset(2026, 10, 26, 9, 0, 0, TimeSpan.Zero));
+
     private HttpClient Server(bool easyAuth = true, string members = $"{Member}, other-member") =>
         factory.WithWebHostBuilder(host =>
         {
             host.UseSetting("Geld:Members", members);
             if (easyAuth) host.UseSetting("WEBSITE_AUTH_ENABLED", "True");
+            host.ConfigureTestServices(services => services.AddSingleton<TimeProvider>(clock));
         }).CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
 
     private static async Task<HttpResponseMessage> Get(HttpClient server, string path, string? user, string? cookies = null)
@@ -62,7 +67,7 @@ public class SignInTests(WebApplicationFactory<Program> factory) : IClassFixture
 
         var cookie = Assert.Single(SetCookieHeaderValue.ParseList(response.Headers.GetValues("Set-Cookie").ToList()));
         Assert.Equal(("AppServiceAuthSession", session, "/"), (cookie.Name.Value, cookie.Value.Value, cookie.Path.Value));
-        Assert.InRange(cookie.Expires!.Value, DateTimeOffset.UtcNow.AddDays(29), DateTimeOffset.UtcNow.AddDays(31));
+        Assert.Equal(clock.GetUtcNow().AddDays(30), cookie.Expires);
         Assert.True(cookie.HttpOnly && cookie.Secure);
     }
 

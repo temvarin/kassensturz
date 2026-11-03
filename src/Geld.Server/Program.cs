@@ -1,41 +1,18 @@
-using System.Security.Claims;
-using Geld.Domain;
-using Geld.Server;
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authorization;
-
-const string Member = "Member";
+using Geld.Server.Account;
+using Geld.Server.Hosting;
+using Geld.Server.Sync;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddAuthentication(EasyAuth.Name).AddScheme<AuthenticationSchemeOptions, EasyAuth>(EasyAuth.Name, null);
-// Authorization, "may this user use the family's data?": only the user ids in the app setting Geld__Members
-// (comma-separated). Not signed in: 401; signed in but not listed: 403.
-builder.Services.AddAuthorization();
-builder.Services.AddOptions<AuthorizationOptions>().Configure<IConfiguration>((options, configuration) =>
-{
-    var members = (configuration["Geld:Members"] ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-    options.AddPolicy(Member, policy => policy.RequireAssertion(context =>
-        members.Contains(context.User.FindFirstValue(ClaimTypes.NameIdentifier))));
-});
+builder.Services.AddFamilySignIn();
+#pragma warning disable RS0030 // The composition root: the one place that picks the real clock.
+builder.Services.AddSingleton(TimeProvider.System);
+#pragma warning restore RS0030
 // Azure SQL; the connection string has no password: the Web App logs in with its managed identity.
 builder.Services.AddSingleton<IDocumentStore>(services => new DocumentStore(services.GetRequiredService<IConfiguration>().GetConnectionString("Geld")
     ?? throw new InvalidOperationException("The connection string Geld is missing.")));
 var app = builder.Build();
 
-// Protections the browser enforces, in case anything ever lets foreign code into the page. Only this site's own scripts
-// (and WebAssembly) run, no other site may show the app in a frame, and files are taken for what their type says. Style
-// attributes are allowed: the app sets bar widths with them.
-app.Use((context, next) =>
-{
-    var headers = context.Response.Headers;
-    headers.ContentSecurityPolicy = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; " +
-        "style-src-attr 'unsafe-inline'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
-    headers.XContentTypeOptions = "nosniff";
-    headers.XFrameOptions = "DENY";
-    // Personal data: neither the browser nor anything on the way may keep a copy of an answer of the API.
-    if (context.Request.Path.StartsWithSegments("/api")) headers.CacheControl = "no-store";
-    return next(context);
-});
+app.UseSecurityHeaders();
 // Placed explicitly after the protections, so that its answers (401, 403) carry them too.
 app.UseAuthentication();
 app.UseAuthorization();
@@ -43,21 +20,10 @@ app.UseAuthorization();
 // The Blazor app's files, served with their pre-compressed variants and caching headers.
 app.MapStaticAssets();
 
-// Signed in is enough here: this is how a new user learns the id to put on the members list. The app asks at every
-// start, which is when the sign-in is made to outlast closing the app.
-app.MapGet("/api/whoami", async (HttpContext context, IAuthorizationService authorization) =>
-    {
-        EasyAuth.KeepSession(context);
-        var user = context.User;
-        return new WhoAmI(
-            user.FindFirstValue(ClaimTypes.NameIdentifier)!,
-            user.Identity?.Name ?? "",
-            (await authorization.AuthorizeAsync(user, Member)).Succeeded);
-    })
-    .RequireAuthorization();
+app.MapWhoAmI();
 // Everything else under /api is for members only, including endpoints added later: Easy Auth lets everyone through
 // to this app (which must load without signing in), so this is the gate.
-var api = app.MapGroup("/api").RequireAuthorization(Member);
+var api = app.MapGroup("/api").RequireAuthorization(Members.Policy);
 // Shows that the database answers, and how often the shared pot has been saved.
 api.MapGet("/status", async (IDocumentStore documents, CancellationToken cancellationToken) =>
     new { KindergeldVersion = (await documents.GetAsync("kindergeld", cancellationToken))?.Version });

@@ -1,7 +1,7 @@
 using System.Data;
 using Microsoft.Data.SqlClient;
 
-namespace Geld.Server;
+namespace Geld.Server.Sync;
 
 /// <summary>A synced document as stored, with the version it is at.</summary>
 public sealed record StoredDocument(string Json, int Version);

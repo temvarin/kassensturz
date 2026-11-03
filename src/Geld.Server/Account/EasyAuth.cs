@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
 using Microsoft.Net.Http.Headers;
 
-namespace Geld.Server;
+namespace Geld.Server.Account;
 
 /// <summary>
 /// Authentication, "who is calling?". The sign-in itself is done by App Service's Easy Auth, which runs in front of this
@@ -47,7 +47,7 @@ public sealed class EasyAuth(
     /// keeps it for as long as Easy Auth accepts it. Easy Auth still decides: it refuses a session older than
     /// <see cref="SessionLifetime"/> and deletes the cookie then, as it does when signing out.
     /// </summary>
-    public static void KeepSession(HttpContext context)
+    public static void KeepSession(HttpContext context, TimeProvider clock)
     {
         // The value as it came: ASP.NET's cookie collections decode and encode values, which could change it.
         if (!CookieHeaderValue.TryParseList(context.Request.Headers.Cookie, out var cookies)) return;
@@ -55,7 +55,7 @@ public sealed class EasyAuth(
         context.Response.Headers.Append(HeaderNames.SetCookie, new SetCookieHeaderValue(SessionCookie, session.Value)
         {
             Path = "/",
-            Expires = DateTimeOffset.UtcNow + SessionLifetime,
+            Expires = clock.GetUtcNow() + SessionLifetime,
             Secure = true,
             HttpOnly = true,
             SameSite = Microsoft.Net.Http.Headers.SameSiteMode.Lax,

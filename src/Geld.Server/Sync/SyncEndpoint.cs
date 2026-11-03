@@ -1,9 +1,11 @@
 using System.Security.Claims;
 using System.Text.Json;
-using System.Text.Json.Serialization.Metadata;
-using Geld.Domain;
+using Geld.Domain.Budgeting;
+using Geld.Domain.Kindergeld;
+using Geld.Domain.Sync;
+using Geld.Domain.Contracts;
 
-namespace Geld.Server;
+namespace Geld.Server.Sync;
 
 /// <summary>
 /// <c>POST /api/sync</c>: applies a phone's changes to the shared pot and to the member's own budget, and answers with
@@ -20,29 +22,31 @@ public static class SyncEndpoint
         // posts here (cross-site request forgery). A form can't send JSON, and a script on another website may only
         // send it after asking this server, which never agrees (no CORS).
         if (!http.HasJsonContentType()) return Results.StatusCode(StatusCodes.Status415UnsupportedMediaType);
-        SyncRequest? request;
+        SyncRequestJson? json;
         try
         {
-            request = await http.ReadFromJsonAsync(ApiJson.Default.SyncRequest, cancellationToken);
+            json = await http.ReadFromJsonAsync(ApiJson.Default.SyncRequestJson, cancellationToken);
         }
         catch (JsonException)
         {
             return Results.BadRequest();
         }
-        if (request is null) return Results.BadRequest();
-        if (request.Protocol != SyncRequest.CurrentProtocol) return Results.Conflict(); // the app asks the user to reload
+        if (json is null) return Results.BadRequest();
+        if (json.Protocol != SyncRequestJson.CurrentProtocol) return Results.Conflict(); // the app asks the user to reload
 
         // The data the app sends belongs to the account it last saw signed in. If the cookie now belongs to someone
         // else, that data must not end up in their budget.
         var userId = user.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        if (request.UserId != userId) return Results.StatusCode(StatusCodes.Status412PreconditionFailed);
+        if (json.UserId != userId) return Results.StatusCode(StatusCodes.Status412PreconditionFailed);
 
         // All or nothing: the whole request is checked before the first document is saved. Applying the changes to
         // empty documents runs every rule.
+        SyncRequest request;
         try
         {
-            new KindergeldPot().Apply(request.Kindergeld);
-            new Budget().Apply(request.Budget);
+            request = json.ToDomain();
+            KindergeldSync.Apply(new(), request.Kindergeld);
+            BudgetSync.Apply(new(), request.Budget);
         }
         catch (ArgumentException)
         {
@@ -51,28 +55,36 @@ public static class SyncEndpoint
 
         // The budget's id comes from the sign-in, never from the request: nobody can read or write another's.
         var kindergeld = await SaveAsync(documents, "kindergeld", request.Kindergeld.IsEmpty,
-            pot => pot.Apply(request.Kindergeld), ApiJson.Default.KindergeldPot, cancellationToken);
+            stored => stored is null ? new() : Read(stored, DocumentJson.Default.KindergeldJson).ToDomain(),
+            pot => KindergeldSync.Apply(pot, request.Kindergeld),
+            pot => JsonSerializer.Serialize(KindergeldJson.From(pot), DocumentJson.Default.KindergeldJson), cancellationToken);
         var budget = await SaveAsync(documents, $"budget:{userId}", request.Budget.IsEmpty,
-            b => b.Apply(request.Budget), ApiJson.Default.Budget, cancellationToken);
+            stored => stored is null ? new() : Read(stored, DocumentJson.Default.BudgetJson).ToDomain(),
+            b => BudgetSync.Apply(b, request.Budget),
+            b => JsonSerializer.Serialize(BudgetJson.From(b), DocumentJson.Default.BudgetJson), cancellationToken);
         return kindergeld is null || budget is null
             ? Results.StatusCode(StatusCodes.Status503ServiceUnavailable) // the app tries again later
-            : Results.Json(new SyncResponse(kindergeld, budget), ApiJson.Default.SyncResponse);
+            : Results.Json(SyncResponseJson.From(new SyncResponse(kindergeld, budget)), ApiJson.Default.SyncResponseJson);
     }
 
     /// <summary>Applies the changes to the latest version of the document (a new one if there is none yet) and saves it.</summary>
+    /// <param name="read">The document from its stored JSON; null: there is none yet.</param>
     /// <returns>The document as saved; null if other requests kept saving it first.</returns>
-    private static async Task<T?> SaveAsync<T>(IDocumentStore documents, string id, bool unchanged, Action<T> apply,
-        JsonTypeInfo<T> json, CancellationToken cancellationToken) where T : class, new()
+    private static async Task<T?> SaveAsync<T>(IDocumentStore documents, string id, bool unchanged, Func<string?, T> read,
+        Func<T, T> apply, Func<T, string> write, CancellationToken cancellationToken) where T : class
     {
         for (var attempt = 0; attempt < Attempts; attempt++)
         {
             var stored = await documents.GetAsync(id, cancellationToken);
-            var document = stored is null ? new T() : JsonSerializer.Deserialize(stored.Json, json)!;
+            var document = read(stored?.Json);
             if (unchanged) return document; // nothing to save: no new version, nothing in the history
-            apply(document);
-            if (await documents.TrySaveAsync(id, JsonSerializer.Serialize(document, json), stored?.Version ?? 0, cancellationToken))
-                return document;
+            var changed = apply(document);
+            if (await documents.TrySaveAsync(id, write(changed), stored?.Version ?? 0, cancellationToken))
+                return changed;
         }
         return null;
     }
+
+    private static T Read<T>(string json, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> type) =>
+        JsonSerializer.Deserialize(json, type) ?? throw new JsonException($"The stored document is null: {type.Type.Name}.");
 }

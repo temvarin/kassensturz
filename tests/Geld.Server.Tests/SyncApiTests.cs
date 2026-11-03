@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
-using Geld.Domain;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,7 +12,7 @@ public class SyncApiTests(WebApplicationFactory<Program> factory) : IClassFixtur
 {
     private static readonly DateOnly Today = new(2026, 10, 14);
 
-    private readonly MemoryDocuments documents = new();
+    private readonly MemoryDocumentStore documents = new();
 
     private HttpClient Server() => factory.WithWebHostBuilder(host =>
     {
@@ -22,7 +21,7 @@ public class SyncApiTests(WebApplicationFactory<Program> factory) : IClassFixtur
         host.ConfigureTestServices(services => services.AddSingleton<IDocumentStore>(documents));
     }).CreateClient();
 
-    private static SyncRequest Changes(AppData phone, string user = "anna") => phone.StartSync(user).Request;
+    private static SyncRequest Changes(AppData phone, string user = "anna") => phone.Synced.StartSync(user).Request;
 
     private async Task<HttpResponseMessage> Post(string user, HttpContent content)
     {
@@ -31,13 +30,34 @@ public class SyncApiTests(WebApplicationFactory<Program> factory) : IClassFixtur
         return await Server().SendAsync(request);
     }
 
-    private Task<HttpResponseMessage> Post(string user, SyncRequest sync) => Post(user, JsonContent.Create(sync, ApiJson.Default.SyncRequest));
+    private Task<HttpResponseMessage> Post(string user, SyncRequest sync) => Post(user, SyncRequestJson.From(sync));
+
+    private Task<HttpResponseMessage> Post(string user, SyncRequestJson sync) => Post(user, JsonContent.Create(sync, ApiJson.Default.SyncRequestJson));
 
     private async Task<SyncResponse> Sync(string user, SyncRequest sync)
     {
         var response = await Post(user, sync);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        return (await response.Content.ReadFromJsonAsync(ApiJson.Default.SyncResponse))!;
+        return (await response.Content.ReadFromJsonAsync(ApiJson.Default.SyncResponseJson))!.ToDomain();
+    }
+
+    [Fact]
+    public async Task The_documents_are_stored_as_DocumentJson_writes_them_not_as_the_api_sends_them()
+    {
+        // The rows outlive the API's settings (six months of history): today both write the same JSON, and this keeps
+        // the server from storing in the API's shape once they differ.
+        var anna = new AppData();
+        anna.Kindergeld.Receive(Today, 518); // a note and a category of null
+        anna.Budget.SetSalary(2850); // and no Rücklage
+        await Sync("anna", Changes(anna));
+
+        var pot = (await documents.GetAsync("kindergeld"))!.Json;
+        var budget = (await documents.GetAsync("budget:anna"))!.Json;
+
+        Assert.Equal(System.Text.Json.JsonSerializer.Serialize(
+            System.Text.Json.JsonSerializer.Deserialize(pot, DocumentJson.Default.KindergeldJson)!, DocumentJson.Default.KindergeldJson), pot);
+        Assert.Equal(System.Text.Json.JsonSerializer.Serialize(
+            System.Text.Json.JsonSerializer.Deserialize(budget, DocumentJson.Default.BudgetJson)!, DocumentJson.Default.BudgetJson), budget);
     }
 
     [Fact]
@@ -75,7 +95,7 @@ public class SyncApiTests(WebApplicationFactory<Program> factory) : IClassFixtur
         var ben = new AppData();
         var jacket = ben.Kindergeld.Spend(Today, 49.99m, "Kleidung");
         documents.BeforeNextSave = async () => await documents.TrySaveAsync("kindergeld",
-            System.Text.Json.JsonSerializer.Serialize(Apply(anna), ApiJson.Default.KindergeldPot), 0);
+            System.Text.Json.JsonSerializer.Serialize(KindergeldJson.From(Apply(anna)), DocumentJson.Default.KindergeldJson), 0);
 
         var answer = await Sync("ben", Changes(ben, "ben"));
 
@@ -86,7 +106,7 @@ public class SyncApiTests(WebApplicationFactory<Program> factory) : IClassFixtur
     public async Task An_app_with_another_protocol_is_asked_to_reload()
     {
         // As an older app sends it: an older protocol, and no user id.
-        var response = await Post("anna", Changes(new AppData()) with { Protocol = SyncRequest.CurrentProtocol - 1, UserId = null });
+        var response = await Post("anna", SyncRequestJson.From(Changes(new AppData())) with { Protocol = SyncRequestJson.CurrentProtocol - 1, UserId = null });
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.Empty(documents.Ids);
@@ -134,7 +154,7 @@ public class SyncApiTests(WebApplicationFactory<Program> factory) : IClassFixtur
         var anna = new AppData();
         anna.Kindergeld.Receive(Today, 518);
 
-        var response = await Post("anna", Changes(anna) with { Budget = new(-100, new([], []), new([], [])) });
+        var response = await Post("anna", Changes(anna) with { Budget = new(new BudgetSettings(-100, null), new([], []), new([], [])) });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Empty(documents.Ids);
@@ -144,9 +164,9 @@ public class SyncApiTests(WebApplicationFactory<Program> factory) : IClassFixtur
     public async Task A_missing_item_is_refused_as_a_bad_request()
     {
         var json = $$"""
-            {"protocol":{{SyncRequest.CurrentProtocol}},"userId":"anna",
+            {"protocol":{{SyncRequestJson.CurrentProtocol}},"userId":"anna",
              "kindergeld":{"settings":null,"entries":{"changed":[null],"removed":[] } },
-             "budget":{"netSalary":null,"deductions":{"changed":[],"removed":[]},"planned":{"changed":[],"removed":[] } } }
+             "budget":{"deductions":{"changed":[],"removed":[]},"planned":{"changed":[],"removed":[]},"settings":null } }
             """;
 
         var response = await Post("anna", new StringContent(json, Encoding.UTF8, "application/json"));
@@ -170,37 +190,5 @@ public class SyncApiTests(WebApplicationFactory<Program> factory) : IClassFixtur
         Assert.Empty(documents.Ids);
     }
 
-    private static KindergeldPot Apply(AppData phone)
-    {
-        var pot = new KindergeldPot();
-        pot.Apply(Changes(phone).Kindergeld);
-        return pot;
-    }
-
-    private sealed class MemoryDocuments : IDocumentStore
-    {
-        private readonly Dictionary<string, StoredDocument> stored = [];
-
-        public IEnumerable<string> Ids => stored.Keys.Order(StringComparer.Ordinal);
-        public Dictionary<string, int> Saves { get; } = [];
-
-        /// <summary>Another phone's save, just after this request read the document.</summary>
-        public Func<Task>? BeforeNextSave { get; set; }
-
-        public Task<StoredDocument?> GetAsync(string id, CancellationToken cancellationToken = default) =>
-            Task.FromResult(stored.GetValueOrDefault(id));
-
-        public async Task<bool> TrySaveAsync(string id, string json, int expectedVersion, CancellationToken cancellationToken = default)
-        {
-            if (BeforeNextSave is { } other)
-            {
-                BeforeNextSave = null;
-                await other();
-            }
-            if ((stored.GetValueOrDefault(id)?.Version ?? 0) != expectedVersion) return false;
-            stored[id] = new StoredDocument(json, expectedVersion + 1);
-            Saves[id] = Saves.GetValueOrDefault(id) + 1;
-            return true;
-        }
-    }
+    private static KindergeldPot Apply(AppData phone) => KindergeldSync.Apply(new(), Changes(phone).Kindergeld);
 }
