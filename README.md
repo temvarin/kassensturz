@@ -49,9 +49,9 @@ Use the installed app rather than a browser tab. Browsers treat installed apps' 
 
 ## Engineering highlights
 
-- **All logic in a plain domain library.** `Geld.Domain` computes balances, statistics, payment dates and the month overview. The Razor pages only display it and pass user input back.
-- **Encapsulated state.** State changes only through domain methods (`Receive`, `Spend`, `AddDeduction`, `Plan`), which keep the invariants: positive amounts, valid days, sorted lists. Setters are internal and exist for source-generated JSON.
-- **A versioned data contract.** The stored data and the backup file are the same JSON document with a schema number. An unknown schema is refused instead of misread, and unreadable data starts the app fresh instead of crashing it. Sync requests carry a protocol number too: an outdated installed app is asked to restart instead of sending data in an old shape.
+- **All logic in a plain domain library.** `Geld.Domain` computes balances, statistics, payment dates and the month overview. The Razor pages only display it and pass user input to one service per area (Kindergeld, budget, backup, sync), with a method for each thing the user does. A change, its save and the notice to the other pages and the sync happen in one call, so no change can be shown without being stored.
+- **Encapsulated state.** State changes only through domain methods (`Receive`, `Spend`, `AddDeduction`, `Plan`), which keep the invariants: positive amounts, valid days, sorted lists. Setters are private: stored and synced data comes back through constructors that apply the same rules as entering it, so an object that exists keeps them.
+- **A versioned data contract.** The stored data and the backup file are the same JSON document, each with its own schema number. Older schemas are migrated on loading, and an unknown schema is refused instead of misread. Data the app can't read is kept aside unchanged, so the app starts fresh without overwriting it, and the user can save it as a file. Samples of what every released version wrote are checked on each build: this version must write the newest exactly and read all of them without losing a value. Sync requests carry a protocol number too: an outdated installed app is asked to restart instead of sending data in an old shape.
 - **Sync without lost updates.** Each phone keeps the data as the server last confirmed it, and sends only what changed since, item by item and always as the item's whole new state, so a repeated request does no harm. If an answer gets lost, the phone can't know whether the server saved; until a sync succeeds, it sends the items of the unanswered request again as they are now, so a deletion made meanwhile isn't undone. The server applies the changes to its latest version and saves with a version check (compare-and-set); if another phone was faster, it applies them again. Changes made while a sync is under way are put back on top of the answer. Of two edits to the same item, the one the server receives last wins; phone clocks are never trusted.
 - **The same rules on both sides.** The server checks every change with the domain code the app uses, so invalid data can't get in, even from a modified client. It checks the whole request before saving anything, so a request is taken in full or not at all. Backup files go through the same rules before they replace anything.
 - **No passwords to leak.** GitHub deploys through OIDC, the server reaches the database with a managed identity, and Microsoft handles sign-in (Easy Auth). A members list decides who gets in, a budget's key comes from the sign-in rather than the request, and each sync request names the account it is for, so data can't land in another account if someone else signed in meanwhile. The API accepts only JSON, which another website can't send along with the user's cookie.
@@ -60,10 +60,11 @@ Use the installed app rather than a browser tab. Browsers treat installed apps' 
 - **Money done right.** Amounts are `decimal` and dates are `DateOnly`. German formatting and parsing are explicit and tested, without shipping culture data.
 - **Deterministic tests.** The clock is an injected `TimeProvider`:
   - xUnit tests the domain, including a seeded randomised test in which three devices edit and sync in random order and must end up with exactly the server's data;
-  - bUnit renders the pages against a fake clock, in-memory storage and a fake server, including the backup round trip and the sync's timing and retries;
+  - bUnit renders the pages against a fake clock and in-memory storage, including the backup round trip and the sync's timing and retries. The sync talks to the real server, running in memory with the documents in memory: only the network in between is simulated (lost answers, a slow line, errors), so the app is tested against the server it will meet, not a copy of it;
+  - the in-memory documents pass the same tests as the store in SQL Server, so that stand-in can't drift from the real thing;
   - the server runs in-process (`WebApplicationFactory`) against a real SQL Server: LocalDB on a developer's machine, a container in CI.
 - **Honest about storage.** The app asks the browser for persistent storage and reminds the user to back up, because browsers may delete a web app's data without warning.
-- **Strict build.** .NET analyzers at the recommended level, warnings are errors, trimming-safe.
+- **Strict build.** .NET analyzers at the recommended level, warnings are errors, trimming-safe. The compiler refuses the system clock and timers outside the one place that registers them (`BannedSymbols.txt`), and architecture tests keep the structure: modules never use one another, the domain has no UI or I/O, the UI reaches storage and the server only through services, and domain state has no public setters. Each rule fails if it ever selects nothing to check.
 - **Accessible.** Every text colour meets WCAG AA in light and dark mode, colour is never the only signal, and motion respects *reduce motion*.
 
 ## Architecture
@@ -75,29 +76,33 @@ One .NET 10 solution: a Blazor WebAssembly app and a small ASP.NET Core server, 
   <img src="docs/diagrams/architecture-light.svg" alt="Architecture: all logic is in the Geld.Domain library, used by both the server and the app. On Azure in Sweden Central, Geld.Server serves the app and syncs, with Easy Auth signing users in; it stores JSON documents with 6 months of history in Azure SQL, reached with a managed identity. GitHub Actions tests and deploys it through OIDC. On the phone, Geld.App, a Blazor WebAssembly PWA, works offline through a service worker, keeps the data and its sync state in localStorage as one JSON document, exports and imports backup files, and syncs with Geld.Server.">
 </picture>
 
-- **Geld.Domain** (`src/Geld.Domain`):
-  - `KindergeldPot`, `Budget`, and `Familienkasse` (the rate and the payment dates);
-  - `Euro` (German amounts);
-  - `AppData` and `DataStore` (persistence with a schema version);
-  - the sync: the changes since the last sync, applying them, and the API's JSON.
+Each project is split into modules by domain, not by kind of code: **Kindergeld**, **Budgeting**, **Sync**, **Backup** and **Account**. Each module holds its own pages, services and rules, plus what all modules build on (`SharedKernel`, the app's `Shell`) and a composition root that puts them together. Modules never use one another; architecture tests check that.
 
-  It has no UI and no I/O beyond a key-value interface, and the clock is passed in.
-- **Geld.App** (`src/Geld.App`): Razor pages and components. Services are injected: state, storage, sync, dialogs, browser features and the clock. `browser.js` holds the browser features without a .NET counterpart: persistent storage, the share sheet, and noticing when the app comes back to the front. The app syncs at start, when it comes back to the front, and two seconds after a change.
-- **Geld.Server** (`src/Geld.Server`): the ASP.NET Core host. It serves the app's files with Brotli compression and caching headers, and answers app routes like `/budget` with the start page. Under `/api` it learns from Easy Auth who is signed in, lets only the members through, and syncs: one shared Kindergeld document and one budget per member, each stored whole as JSON in Azure SQL.
+- **Geld.Domain** (`src/Geld.Domain`): the rules, without UI or I/O beyond a key-value interface; the clock is passed in.
+  - `Kindergeld`: the pot, and `Familienkasse` (the rate and the payment dates);
+  - `Budgeting`: the monthly budget, its overview and the Rücklage;
+  - `Sync`: the changes since the last sync, applied on the other side. `Replica` syncs one document (its base, unanswered changes, the rebase) and `SyncedData` pairs the pot and the budget for one account. It knows them through two adapters, and they know nothing of it;
+  - `AppData`: everything on a phone: the synced data and the backup date;
+  - `Contracts`: the JSON that is stored, sent and saved in the database, as plain records that map to the model. The model itself knows no JSON;
+  - `Storage`: `DataStore`, the stored data with a schema version.
+- **Geld.App** (`src/Geld.App`): a folder per module (`Kindergeld`, `Budgeting`, `Sync`, `Backup`), each with its pages, components and the one service its pages use. A service gets only its module's part of the data (a `Slot`) and hands it to the pages as a read-only view. The `Shell` holds what they share: layout pieces, the app state, dialogs, the browser features, German formatting. The root composes them: the layout, the settings page (one section per module) and the services. It also registers the banners that the Kindergeld and budget pages show from other modules. `browser.js` holds the browser features without a .NET counterpart: persistent storage, the share sheet, and noticing when the app comes back to the front. The app syncs at start, when it comes back to the front, and two seconds after a change. In the `Sync` module, `AccountService` knows who is signed in and `SyncService` runs the syncs.
+- **Geld.Server** (`src/Geld.Server`): the ASP.NET Core host, with the modules `Account` (sign-in, members), `Sync` (the endpoint and the documents) and `Hosting` (the browser protections). It serves the app's files with Brotli compression and caching headers, and answers app routes like `/budget` with the start page. Under `/api` it learns from Easy Auth who is signed in, lets only the members through, and syncs: one shared Kindergeld document and one budget per member, each stored whole as JSON in Azure SQL.
 - **db/**: the database schema, the app's database user (read and write only), and the restore script, run by hand in the Azure portal's query editor.
 
 ### Repository layout
 
 ```
 src/
-  Geld.Domain/           money, Kindergeld pot, budget, payment dates, storage
-  Geld.App/              Blazor WebAssembly PWA: pages, components, services
-  Geld.Server/           ASP.NET Core host for the app and the sync API
+  Geld.Domain/           Kindergeld/, Budgeting/, Sync/, SharedKernel/; Contracts/ and Storage/
+  Geld.App/              Blazor WebAssembly PWA: Kindergeld/, Budgeting/, Sync/, Backup/, Shell/
+  Geld.Server/           ASP.NET Core host: Account/, Sync/, Hosting/
 db/                      SQL scripts: schema, database user, restore
 tests/
-  Geld.Domain.Tests/     xUnit
+  Geld.Domain.Tests/     xUnit, with samples of every released data format (Contracts/)
   Geld.App.Tests/        bUnit component tests
   Geld.Server.Tests/     API and database tests (WebApplicationFactory, SQL Server)
+  Geld.Architecture.Tests/  which part may use which (NetArchTest)
+  Geld.Testing/          what both test projects use: the documents in memory
 docs/                    screenshots and diagrams
 ```
 
