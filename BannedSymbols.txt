@@ -1,0 +1,16 @@
+# APIs the code in src/ must not use, checked by the compiler (Microsoft.CodeAnalysis.BannedApiAnalyzers, RS0030).
+# Format: <documentation id>;<the reason shown in the error>
+
+# Time comes from the injected TimeProvider, so that tests can set it (ADR 3). Only the composition roots register
+# TimeProvider.System, and say so with a pragma.
+P:System.DateTime.Now;Use the injected TimeProvider, so that tests can set the time (ADR 3)
+P:System.DateTime.UtcNow;Use the injected TimeProvider, so that tests can set the time (ADR 3)
+P:System.DateTime.Today;Use the injected TimeProvider, so that tests can set the time (ADR 3)
+P:System.DateTimeOffset.Now;Use the injected TimeProvider, so that tests can set the time (ADR 3)
+P:System.DateTimeOffset.UtcNow;Use the injected TimeProvider, so that tests can set the time (ADR 3)
+P:System.TimeZoneInfo.Local;Use TimeProvider.LocalTimeZone, so that tests can set the time zone (ADR 3)
+P:System.TimeProvider.System;Inject TimeProvider, only a composition root registers the system clock (ADR 3)
+M:System.Threading.Tasks.Task.Delay(System.TimeSpan);Pass the injected TimeProvider, so that tests don't wait (ADR 3)
+M:System.Threading.Tasks.Task.Delay(System.Int32);Pass the injected TimeProvider, so that tests don't wait (ADR 3)
+M:System.Threading.Tasks.Task.Delay(System.TimeSpan,System.Threading.CancellationToken);Pass the injected TimeProvider, so that tests don't wait (ADR 3)
+M:System.Threading.Tasks.Task.Delay(System.Int32,System.Threading.CancellationToken);Pass the injected TimeProvider, so that tests don't wait (ADR 3)

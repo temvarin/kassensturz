@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="NetArchTest.eNhancedEdition" Version="1.4.5" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <!-- The compiled code of all three: the rules read their dependencies from it. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Geld.Server\Geld.Server.csproj" />
+    <ProjectReference Include="..\..\src\Geld.App\Geld.App.csproj" />
+    <ProjectReference Include="..\..\src\Geld.Domain\Geld.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -6,7 +6,9 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Geld.App.Tests/Geld.App.Tests.csproj" />
+    <Project Path="tests/Geld.Architecture.Tests/Geld.Architecture.Tests.csproj" />
     <Project Path="tests/Geld.Domain.Tests/Geld.Domain.Tests.csproj" />
     <Project Path="tests/Geld.Server.Tests/Geld.Server.Tests.csproj" />
+    <Project Path="tests/Geld.Testing/Geld.Testing.csproj" />
   </Folder>
 </Solution>
