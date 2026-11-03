@@ -1,4 +1,4 @@
-namespace Geld.App.Services;
+namespace Geld.App.Shell;
 
 /// <summary>Dates in German. The app ships without culture data (InvariantGlobalization), so the names are spelled out.</summary>
 public static class German

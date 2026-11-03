@@ -1,0 +1,14 @@
+@* Reminds the user that the data lives only in this browser until it is backed up. *@
+@* Listens for changes itself: a banner has no parameters, so it isn't drawn anew when its page is. *@
+@inherits DataPage
+@inject BackupService Backup
+@inject TimeProvider Clock
+
+@if (Backup.IsDue)
+{
+    <a class="banner" href="einstellungen">
+        <Icon Name="cloud-upload" />
+        <span>@(Backup.LastBackup is { } last ? $"Letzte Sicherung {German.Relative(last, Clock.Today())}" : "Noch keine Sicherung") – jetzt sichern</span>
+        <Icon Name="chevron-right" />
+    </a>
+}

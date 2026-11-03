@@ -71,7 +71,7 @@
 
     private async Task Submit()
     {
-        if (!Euro.TryParse(amount, out var value))
+        if (!Euro.TryParse(amount, out var value) || !KindergeldRules.IsAmount(value))
         {
             amountError = AmountField.Hint;
             return;

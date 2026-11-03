@@ -1,5 +1,3 @@
-using Geld.App.Pages;
-using Geld.Domain;
 
 namespace Geld.App.Tests;
 
@@ -60,6 +58,21 @@ public class ReserveTests : AppTestContext
         Assert.Equal(new Reserve(2300, Today), Stored.Budget.Reserve);
         Assert.Empty(page.FindAll(".sheet"));
         Assert.Equal("Gedeckt aus der Rücklage", page.Find(".status").TextContent.Trim());
+    }
+
+    [Fact]
+    public void A_used_up_reserve_can_be_entered_as_zero_and_still_counts_as_one()
+    {
+        Data.Budget.SetReserve(2300, Today);
+        var page = Render<MonthBudget>();
+
+        page.Find(".reserve-card").Click();
+        page.Find(".sheet input[inputmode=decimal]").Change("0");
+        page.Find(".sheet form").Submit();
+
+        Assert.Equal(new Reserve(0, Today), Stored.Budget.Reserve);
+        Assert.Contains("0,00 €", page.Find(".reserve-card").TextContent);
+        Assert.Equal("Nicht gedeckt: 200,00 €", page.Find(".status").TextContent.Trim());
     }
 
     [Fact]

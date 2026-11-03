@@ -1,6 +1,4 @@
 using AngleSharp.Dom;
-using Geld.App.Services;
-using Geld.Domain;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
@@ -21,11 +19,11 @@ public abstract class AppTestContext : BunitContext
         Services.AddAppServices();
         Services.AddSingleton<IKeyValueStore, MemoryStore>();
         Services.AddSingleton<TimeProvider>(Clock);
-        Services.AddSingleton(new HttpClient(new StubServer(request => Server.Answer(request))) { BaseAddress = new Uri("http://localhost/") });
+        Services.AddSingleton(new HttpClient(Server.Network) { BaseAddress = new Uri("http://localhost/") });
     }
 
-    /// <summary>Answers the app's requests to the server. Unless a test signs someone in, nobody is.</summary>
-    protected FakeServer Server { get; } = new();
+    /// <summary>The real server behind a network the test controls. Unless a test signs someone in, nobody is.</summary>
+    protected AppServer Server { get; } = new();
 
     protected AppData Data => Services.GetRequiredService<AppState>().Data;
     protected Dialogs Dialogs => Services.GetRequiredService<Dialogs>();
@@ -33,14 +31,35 @@ public abstract class AppTestContext : BunitContext
     /// <summary>What a fresh start of the app would load.</summary>
     protected AppData Stored => Services.GetRequiredService<DataStore>().Load();
 
+    /// <summary>
+    /// Waits for what happens on the server's side. bUnit's WaitForAssertion checks again only when a component renders,
+    /// and nothing has to render after the server saved.
+    /// </summary>
+    protected static void Eventually(Action assertion)
+    {
+        var waited = System.Diagnostics.Stopwatch.StartNew();
+        while (true)
+        {
+            try
+            {
+                assertion();
+                return;
+            }
+            catch (Xunit.Sdk.XunitException) when (waited.Elapsed < TimeSpan.FromSeconds(10))
+            {
+                Thread.Sleep(20);
+            }
+        }
+    }
+
     /// <summary>The button with this text or accessible label.</summary>
     protected static IElement Button<T>(IRenderedComponent<T> cut, string text) where T : IComponent =>
         cut.FindAll("button").Single(b => b.TextContent.Trim() == text || b.GetAttribute("aria-label") == text);
 
-    private sealed class StubServer(Func<HttpRequestMessage, Task<HttpResponseMessage>> answer) : HttpMessageHandler
+    protected override void Dispose(bool disposing)
     {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
-            answer(request);
+        if (disposing) Server.Dispose();
+        base.Dispose(disposing);
     }
 
     private sealed class MemoryStore : IKeyValueStore
@@ -48,5 +67,6 @@ public abstract class AppTestContext : BunitContext
         private readonly Dictionary<string, string> _data = [];
         public string? Read(string key) => _data.GetValueOrDefault(key);
         public void Write(string key, string value) => _data[key] = value;
+        public void Remove(string key) => _data.Remove(key);
     }
 }

@@ -65,8 +65,8 @@
 
     private async Task Submit()
     {
-        nameError = string.IsNullOrWhiteSpace(name);
-        var validAmount = Euro.TryParse(amount, out var value);
+        nameError = !BudgetRules.IsName(name);
+        var validAmount = Euro.TryParse(amount, out var value) && BudgetRules.IsAmount(value);
         amountError = validAmount ? null : AmountField.Hint;
         if (nameError || !validAmount) return;
         await OnSave.InvokeAsync(new Result(name, value, Day is null ? null : day));

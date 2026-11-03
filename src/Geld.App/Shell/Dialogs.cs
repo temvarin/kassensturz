@@ -1,4 +1,4 @@
-namespace Geld.App.Services;
+namespace Geld.App.Shell;
 
 /// <param name="Cancel">Second button; none for a plain message.</param>
 public sealed record MessageModal(string Message, string Ok, string? Cancel, bool Danger, TaskCompletionSource<bool> Result);

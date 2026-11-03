@@ -2,10 +2,10 @@
    changes stay on this phone. A phone that never synced uses the app without an account, which is nothing to warn about. *@
 @implements IDisposable
 @inject SyncService Sync
-@inject AppState State
+@inject AccountService Account
 @inject NavigationManager Navigation
 
-@if (Sync.Status == SyncStatus.SignedOut && State.Data.Sync is not null)
+@if (Account.Status == AccountStatus.SignedOut && Sync.LastSync is not null)
 {
     <button class="banner" @onclick="SignIn">
         <Icon Name="cloud-off" />

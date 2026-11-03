@@ -1,6 +1,6 @@
 using Microsoft.JSInterop;
 
-namespace Geld.App.Services;
+namespace Geld.App.Shell;
 
 /// <summary>Browser features without a .NET counterpart (wwwroot/browser.js).</summary>
 public sealed class Browser(IJSRuntime js)

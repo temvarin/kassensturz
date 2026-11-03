@@ -1,10 +1,10 @@
 @page "/budget"
 @inherits DataPage
 @inject TimeProvider Clock
+@inject BudgetService BudgetService
 
 <TopBar Title="Budget" Kicker="@(Budget.NetSalary > 0 ? $"Netto {Euro.Format(Budget.NetSalary)}" : "Monatsbudget")" />
-<SignInBanner />
-<BackupBanner />
+<Banners />
 
 @* Only the current and later months: past months would be recomputed with today's salary and costs. *@
 <div class="month-nav">
@@ -192,7 +192,7 @@
     private string reserveInput = "";
     private string? reserveError;
 
-    private Budget Budget => State.Data.Budget;
+    private IReadOnlyBudget Budget => BudgetService.Budget;
     private DateOnly Month => new DateOnly(Today.Year, Today.Month, 1).AddMonths(offset);
     private MonthOverview overview = null!;
     private DeductionLine? nextDue;
@@ -239,66 +239,59 @@
 
     private void Saved()
     {
-        State.Save();
         Close();
         Refresh();
     }
 
     private void SaveSalary()
     {
-        if (!Euro.TryParse(salary, out var value))
+        if (!Euro.TryParse(salary, out var value) || !BudgetRules.IsSalary(value))
         {
             salaryError = AmountField.Hint;
             return;
         }
-        Budget.SetSalary(value);
+        BudgetService.SetSalary(value);
         Saved();
     }
 
     private void SaveReserve()
     {
-        if (!Euro.TryParse(reserveInput, out var value))
+        if (!Euro.TryParse(reserveInput, out var value) || !BudgetRules.IsReserve(value))
         {
             reserveError = AmountField.Hint;
             return;
         }
-        Budget.SetReserve(value, Today);
+        BudgetService.SetReserve(value);
         Saved();
     }
 
     private void RemoveReserve()
     {
-        Budget.RemoveReserve();
+        BudgetService.RemoveReserve();
         Saved();
     }
 
     private void SaveDeduction(BudgetItemSheet.Result r)
     {
-        if (Budget.Deductions.FirstOrDefault(d => d.Id == editId) is { } existing)
-            Budget.UpdateDeduction(existing with { Name = r.Name, Amount = r.Amount, Day = r.Day!.Value });
-        else
-            Budget.AddDeduction(r.Name, r.Amount, r.Day!.Value);
+        BudgetService.SaveDeduction(editId, r.Name, r.Amount, r.Day!.Value);
         Saved();
     }
 
     private void DeleteDeduction()
     {
-        Budget.RemoveDeduction(editId!.Value);
+        BudgetService.RemoveDeduction(editId!.Value);
         Saved();
     }
 
     private void SavePlanned(BudgetItemSheet.Result r)
     {
-        if (Budget.Planned.FirstOrDefault(p => p.Id == editId) is { } existing)
-            Budget.UpdatePlanned(existing with { Name = r.Name, Amount = r.Amount });
-        else
-            Budget.Plan(Month.Year, Month.Month, r.Name, r.Amount);
+        BudgetService.SavePlanned(editId, Month.Year, Month.Month, r.Name, r.Amount);
         Saved();
     }
 
     private void DeletePlanned()
     {
-        Budget.RemovePlanned(editId!.Value);
+        BudgetService.RemovePlanned(editId!.Value);
         Saved();
     }
 }

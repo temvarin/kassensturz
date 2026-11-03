@@ -1,6 +1,4 @@
 using System.Net;
-using Geld.App.Components;
-using Geld.Domain;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -24,7 +22,7 @@ public class AccountTests : AppTestContext
     [Fact]
     public void A_member_sees_their_account_and_can_sign_out()
     {
-        Server.User = FakeServer.Anna;
+        Server.User = AppServer.Anna;
         var card = Render<AccountCard>();
         card.WaitForAssertion(() => Assert.Equal("anna@example.com", card.Find(".account").TextContent));
         Assert.Empty(card.FindAll("code"));
@@ -37,11 +35,11 @@ public class AccountTests : AppTestContext
     [Fact]
     public void Someone_not_yet_on_the_members_list_sees_the_id_to_send_in_and_nothing_is_synced()
     {
-        Server.User = FakeServer.Anna with { Member = false };
+        Server.User = AppServer.Stranger;
         Data.Kindergeld.Receive(Today, 518);
         var card = Render<AccountCard>();
 
-        card.WaitForAssertion(() => Assert.Equal("8a1c0e52", card.Find("code").TextContent));
+        card.WaitForAssertion(() => Assert.Equal(AppServer.Stranger.Id, card.Find("code").TextContent));
         Assert.Empty(Server.Syncs);
         Assert.Empty(card.FindAll(".sync"));
     }

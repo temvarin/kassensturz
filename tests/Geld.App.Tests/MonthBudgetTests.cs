@@ -1,5 +1,3 @@
-using Geld.App.Pages;
-using Geld.App.Services;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Geld.App.Tests;
@@ -96,5 +94,19 @@ public class MonthBudgetTests : AppTestContext
 
         Assert.Equal(["Miete", "Spotify", "Handy"], Stored.Budget.Deductions.Select(d => d.Name));
         Assert.Equal(3, Stored.Budget.Deductions[1].Day);
+    }
+
+    [Fact]
+    public void A_fixed_cost_without_a_name_or_of_zero_is_refused_as_the_budget_would_refuse_it()
+    {
+        var page = Render<MonthBudget>();
+
+        Button(page, "Fixkosten hinzufügen").Click();
+        page.Find(".sheet input:not([inputmode])").Change("  ");
+        page.Find(".sheet input[inputmode=decimal]").Change("0");
+        page.Find(".sheet form").Submit();
+
+        Assert.Equal(["Bitte benennen", "Z. B. 12,50 eingeben"], page.FindAll(".sheet .error").Select(e => e.TextContent));
+        Assert.Empty(Stored.Budget.Deductions);
     }
 }

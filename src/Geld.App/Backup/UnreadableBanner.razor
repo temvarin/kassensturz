@@ -1,0 +1,12 @@
+@* Stored data this version couldn't read was kept aside when the app started (DataStore.Load). Until the user saves
+   or discards it in the settings, this says why the app looks empty. *@
+@inject BackupService Backup
+
+@if (Backup.Unreadable is not null)
+{
+    <a class="banner" href="einstellungen">
+        <Icon Name="alert-triangle" />
+        <span>Gespeicherte Daten ließen sich nicht lesen. Sie sind aufbewahrt – ansehen</span>
+        <Icon Name="chevron-right" />
+    </a>
+}

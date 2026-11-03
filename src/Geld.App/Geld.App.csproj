@@ -23,4 +23,9 @@
     <InternalsVisibleTo Include="Geld.App.Tests" />
   </ItemGroup>
 
+  <!-- The shell is what every module builds on: layout pieces, the app state, the browser, formatting. -->
+  <ItemGroup>
+    <Using Include="Geld.App.Shell" />
+  </ItemGroup>
+
 </Project>

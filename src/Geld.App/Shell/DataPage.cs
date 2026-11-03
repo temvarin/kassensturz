@@ -1,11 +1,12 @@
 using Microsoft.AspNetCore.Components;
 
-namespace Geld.App.Services;
+namespace Geld.App.Shell;
 
 /// <summary>A page that shows the user's data, and shows it anew when a sync brings changes while it is open.</summary>
 public abstract class DataPage : ComponentBase, IDisposable
 {
-    [Inject] protected AppState State { get; set; } = null!;
+    // Only to hear of changes: pages read and change the data through the services of their area.
+    [Inject] private AppState State { get; set; } = null!;
 
     private bool listening;
 

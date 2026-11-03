@@ -1,0 +1,29 @@
+@* Settings: stored data this version couldn't read, kept aside (DataStore.Load). Shown only while there is some. *@
+@inherits DataPage
+@inject BackupService Backup
+@inject Dialogs Dialogs
+
+@if (Backup.Unreadable is not null)
+{
+    <div class="section"><h2>Nicht lesbare Daten</h2></div>
+    <div class="card">
+        <p class="hint">
+            Beim Start ließen sich die gespeicherten Daten nicht lesen, etwa weil eine neuere Version der App sie geschrieben
+            hat. Damit nichts verloren geht, liegen sie unverändert beiseite. Als Datei gespeichert, lassen sie sich mit
+            einer passenden Version über „Sicherung laden“ wieder einlesen.
+        </p>
+        <button class="btn primary" @onclick="Backup.SaveUnreadableAsync"><Icon Name="download" />Als Datei speichern</button>
+        <button class="btn danger" @onclick="DiscardUnreadable"><Icon Name="trash" />Verwerfen</button>
+    </div>
+}
+
+@code {
+    private async Task DiscardUnreadable()
+    {
+        if (await Dialogs.Confirm("Die nicht lesbaren Daten endgültig löschen? Speichere sie vorher als Datei, wenn du sie noch brauchst.",
+                ok: "Löschen", cancel: "Abbrechen", danger: true))
+        {
+            Backup.DiscardUnreadable();
+        }
+    }
+}

@@ -1,7 +1,7 @@
-using Geld.Domain;
+using Geld.Domain.Storage;
 using Microsoft.JSInterop;
 
-namespace Geld.App.Services;
+namespace Geld.App.Shell;
 
 /// <summary>The browser's localStorage. Called synchronously: in WebAssembly, JavaScript runs in the same thread.</summary>
 internal sealed class LocalStorage(IJSRuntime js) : IKeyValueStore
@@ -11,4 +11,6 @@ internal sealed class LocalStorage(IJSRuntime js) : IKeyValueStore
     public string? Read(string key) => Js.Invoke<string?>("localStorage.getItem", key);
 
     public void Write(string key, string value) => Js.InvokeVoid("localStorage.setItem", key, value);
+
+    public void Remove(string key) => Js.InvokeVoid("localStorage.removeItem", key);
 }

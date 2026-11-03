@@ -1,7 +1,3 @@
-using Geld.App.Components;
-using Geld.App.Pages;
-using Geld.Domain;
-using Geld.App.Services;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -17,6 +13,17 @@ public class BackupTests : AppTestContext
         Data.Kindergeld.Receive(Today, 518);
 
         Assert.Contains("Noch keine Sicherung", Render<BackupBanner>().Find(".banner").TextContent);
+    }
+
+    [Fact]
+    public void The_reminder_appears_on_the_page_where_the_first_entry_is_booked()
+    {
+        var page = Render<Kindergeld.Home>();
+        Assert.Empty(page.FindAll(".banner"));
+
+        Button(page, "259,00 € erhalten").Click();
+
+        Assert.Contains("Noch keine Sicherung", page.Find(".banner").TextContent);
     }
 
     [Fact]
@@ -50,8 +57,7 @@ public class BackupTests : AppTestContext
     [InlineData(false, 100)]
     public void Loading_a_backup_asks_before_replacing_the_data_on_this_device(bool replace, decimal expected)
     {
-        Data.Kindergeld.Receive(Today, 100);
-        Services.GetRequiredService<AppState>().Save();
+        Services.GetRequiredService<AppState>().Change(data => data.Kindergeld.Receive(Today, 100));
         var backup = new AppData();
         backup.Kindergeld.Receive(Today, 518);
         var settings = Render<Settings>();
@@ -68,6 +74,24 @@ public class BackupTests : AppTestContext
 
         Assert.Equal(("Alle Daten auf diesem Gerät durch die Sicherung ersetzen?", 100m), asked);
         Assert.Equal(expected, Stored.Kindergeld.Received);
+    }
+
+    [Fact]
+    public void Loading_a_backup_asks_also_when_the_device_holds_only_a_reserve()
+    {
+        Services.GetRequiredService<BudgetService>().SetReserve(1000);
+        var backup = new AppData();
+        backup.Kindergeld.Receive(Today, 518);
+        var settings = Render<Settings>();
+        Dialogs.Changed += () =>
+        {
+            if (Dialogs.Current is { Cancel: not null }) Dialogs.Close(false);
+        };
+
+        settings.FindComponent<InputFile>().UploadFiles(InputFileContent.CreateFromText(DataStore.Serialize(backup), "backup.json"));
+
+        Assert.Equal(1000m, Stored.Budget.Reserve?.Amount);
+        Assert.Empty(Stored.Kindergeld.Entries);
     }
 
     [Fact]

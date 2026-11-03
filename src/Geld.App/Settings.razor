@@ -1,0 +1,12 @@
+@page "/einstellungen"
+@using Geld.App.Backup
+@using Geld.App.Kindergeld
+@using Geld.App.Sync
+@* Composed at the root from one section per module, so the modules stay apart. *@
+
+<TopBar Title="Einstellungen" Back="" />
+
+<UnreadableDataSection />
+<KindergeldSection />
+<BackupSection />
+<AccountCard />

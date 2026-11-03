@@ -1,10 +1,10 @@
 @page "/"
 @inherits DataPage
 @inject TimeProvider Clock
+@inject KindergeldService Kindergeld
 
 <TopBar Title="Kindergeld" Kicker="@Kicker" />
-<SignInBanner />
-<BackupBanner />
+<Banners />
 
 <div class="card">
     <div class="label">Übrig im Topf</div>
@@ -39,7 +39,7 @@ else
     </div>
 }
 
-<button class="btn primary hero" @onclick="ReceiveMonth"><Icon Name="plus" />@Euro.Format(Pot.QuickAmount) erhalten</button>
+<button class="btn primary hero" @onclick="Kindergeld.ReceiveMonth"><Icon Name="plus" />@Euro.Format(Pot.QuickAmount) erhalten</button>
 <div class="pair">
     <button class="btn" @onclick="() => Open(EntryKind.Payment)">Anderer Betrag</button>
     <button class="btn" @onclick="() => Open(EntryKind.Spending)"><Icon Name="minus" />Ausgabe</button>
@@ -78,17 +78,10 @@ else
     private EntryKind? sheetKind;
     private Entry? editing;
 
-    private KindergeldPot Pot => State.Data.Kindergeld;
+    private IReadOnlyKindergeldPot Pot => Kindergeld.Pot;
 
     private string Kicker =>
         $"{Pot.Children} {(Pot.Children == 1 ? "Kind" : "Kinder")} · {(Pot.EndDigit is { } d ? $"Endziffer {d}" : "Endziffer fehlt")}";
-
-    /// <summary>One month of Kindergeld, booked today: the common case is a single tap.</summary>
-    private void ReceiveMonth()
-    {
-        Pot.Receive(Today, Pot.QuickAmount);
-        State.Save();
-    }
 
     private void Open(EntryKind kind) => (sheetKind, editing) = (kind, null);
 
@@ -98,20 +91,14 @@ else
 
     private void Save(EntrySheet.Result r)
     {
-        // The entry may have been deleted on another phone while the sheet was open: then it comes back as a new one.
-        if (editing is not null && Pot.Entries.Any(e => e.Id == editing.Id))
-            Pot.Update(editing with { Date = r.Date, Amount = r.Amount, Category = r.Category, Note = r.Note });
-        else if (sheetKind == EntryKind.Payment) Pot.Receive(r.Date, r.Amount, r.Note);
-        else Pot.Spend(r.Date, r.Amount, r.Category, r.Note);
-        State.Save();
+        Kindergeld.Book(editing?.Id, sheetKind!.Value, r.Date, r.Amount, r.Category, r.Note);
         Close();
     }
 
     private void Delete()
     {
         if (editing is null) return;
-        Pot.Remove(editing.Id);
-        State.Save();
+        Kindergeld.Remove(editing.Id);
         Close();
     }
 

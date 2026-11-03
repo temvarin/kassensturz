@@ -1,6 +1,7 @@
 @page "/statistik"
 @inherits DataPage
 @inject TimeProvider Clock
+@inject KindergeldService Kindergeld
 
 <TopBar Title="Statistik" Kicker="Kindergeld" />
 
@@ -70,7 +71,7 @@
     private IReadOnlyList<MonthTotals> monthly = [];
     private decimal monthlyMax;
 
-    private KindergeldPot Pot => State.Data.Kindergeld;
+    private IReadOnlyKindergeldPot Pot => Kindergeld.Pot;
 
     private IReadOnlyList<CategoryTotal> byCategory = [];
 

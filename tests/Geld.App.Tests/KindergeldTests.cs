@@ -1,5 +1,3 @@
-using Geld.App.Pages;
-using Geld.Domain;
 
 namespace Geld.App.Tests;
 
@@ -72,6 +70,19 @@ public class KindergeldTests : AppTestContext
 
         Button(page, "Ausgabe").Click();
         page.Find(".sheet input[inputmode=decimal]").Change("zwölf");
+        page.Find(".sheet form").Submit();
+
+        Assert.Equal("Z. B. 12,50 eingeben", page.Find(".sheet .error").TextContent);
+        Assert.Empty(Data.Kindergeld.Entries);
+    }
+
+    [Fact]
+    public void A_zero_amount_is_refused_as_the_pot_would_refuse_it()
+    {
+        var page = Render<Home>();
+
+        Button(page, "Ausgabe").Click();
+        page.Find(".sheet input[inputmode=decimal]").Change("0,00");
         page.Find(".sheet form").Submit();
 
         Assert.Equal("Z. B. 12,50 eingeben", page.Find(".sheet .error").TextContent);
