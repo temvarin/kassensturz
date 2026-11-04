@@ -43,6 +43,19 @@ public class SyncTests
     private static string Json(Budget budget) => JsonSerializer.Serialize(BudgetJson.From(budget), ApiJson.Default.BudgetJson);
 
     [Fact]
+    public void An_item_both_removed_and_changed_in_one_request_ends_up_changed()
+    {
+        // The app never sends this; a request made by hand might. The changed item wins, as when it arrives later.
+        var pot = new KindergeldPot();
+        var jacket = pot.Spend(Today, 49.99m, "Kleidung");
+        var changes = new KindergeldChanges(null, new([jacket with { Amount = 39.99m }], [jacket.Id]));
+
+        var after = KindergeldSync.Apply(pot, changes);
+
+        Assert.Equal([jacket with { Amount = 39.99m }], after.Entries);
+    }
+
+    [Fact]
     public void The_changes_are_what_was_added_edited_and_removed_since_the_base()
     {
         var before = new KindergeldPot();
@@ -152,7 +165,7 @@ public class SyncTests
         var anna = new AppData();
         var ben = new AppData();
         var payment = anna.Kindergeld.Receive(Today, 518);
-        var rent = anna.Budget.AddDeduction("Miete", 1150, 1);
+        var rent = anna.Budget.AddDeduction("Miete", 1150, new MonthlyOn(1));
         var gift = anna.Budget.Plan(2026, 10, "Geschenk", 30);
         server.Sync("anna", anna);
         server.Sync("ben", ben);
@@ -234,10 +247,10 @@ public class SyncTests
         var before = new Budget();
         before.SetSalary(2850);
         var phone = Network(before);
-        var gym = phone.AddDeduction("Fitnessstudio", 29.90m, 28);
+        var gym = phone.AddDeduction("Fitnessstudio", 29.90m, new MonthlyOn(28));
         var makeUp = phone.Plan(2026, 10, "Make-up", 45);
         var server = new Budget();
-        var rent = server.AddDeduction("Miete", 1150, 1);
+        var rent = server.AddDeduction("Miete", 1150, new MonthlyOn(1));
         var gift = server.Plan(2026, 10, "Geschenk", 30);
 
         var changes = BudgetSync.Diff(before, phone);
@@ -318,6 +331,61 @@ public class SyncTests
         server.Sync("anna", phone);
 
         Assert.Throws<InvalidOperationException>(() => phone.Synced.StartSync("ben"));
+    }
+
+    [Fact]
+    public void A_backup_restored_while_a_sync_is_under_way_removes_nothing_from_the_server()
+    {
+        var server = new Server();
+        var phone = new AppData();
+        var payment = phone.Kindergeld.Receive(Today, 518);
+        server.Sync("anna", phone);
+        var backup = new AppData();
+        var shoes = backup.Kindergeld.Spend(Today, 35, "Kleidung"); // a backup without the payment
+
+        var underWay = phone.Synced.StartSync("anna");
+        phone.RestoreFrom(backup);
+        phone.Synced.CompleteSync(underWay, server.Sync("anna", Network(underWay.Request)), Now);
+        server.Sync("anna", phone);
+
+        Assert.Equal([shoes.Id, payment.Id], server.Kindergeld.Entries.Select(e => e.Id));
+        Assert.Equal([shoes.Id, payment.Id], phone.Kindergeld.Entries.Select(e => e.Id));
+    }
+
+    [Fact]
+    public void A_backup_restored_while_a_sync_is_under_way_whose_answer_gets_lost_removes_nothing_from_the_server()
+    {
+        var server = new Server();
+        var phone = new AppData();
+        var payment = phone.Kindergeld.Receive(Today, 518);
+        var backup = new AppData();
+        var shoes = backup.Kindergeld.Spend(Today, 35, "Kleidung");
+
+        var underWay = phone.Synced.StartSync("anna");
+        phone.RestoreFrom(backup);
+        server.Sync("anna", Network(underWay.Request)); // saved, but the answer never arrived
+        phone.Synced.SyncFailed(underWay);
+        server.Sync("anna", phone);
+
+        Assert.Equal([shoes.Id, payment.Id], server.Kindergeld.Entries.Select(e => e.Id));
+    }
+
+    [Fact]
+    public void A_backup_restored_after_a_lost_answer_removes_nothing_from_the_server()
+    {
+        var server = new Server();
+        var phone = new AppData();
+        var payment = phone.Kindergeld.Receive(Today, 518);
+        var lost = phone.Synced.StartSync("anna");
+        server.Sync("anna", Network(lost.Request)); // saved, but the answer never arrived
+        phone.Synced.SyncFailed(lost);
+        var backup = new AppData();
+        var shoes = backup.Kindergeld.Spend(Today, 35, "Kleidung");
+
+        phone.RestoreFrom(backup);
+        server.Sync("anna", phone);
+
+        Assert.Equal([shoes.Id, payment.Id], server.Kindergeld.Entries.Select(e => e.Id));
     }
 
     [Fact]
@@ -457,29 +525,36 @@ public class SyncTests
     [Fact]
     public void Phones_that_edit_and_sync_in_any_order_end_up_with_the_same_data_as_the_server()
     {
-        // Three devices of two people edit at random and sync in random order, also editing while a sync is under way.
-        // Whatever happens, once everyone has synced twice in a row, every device has exactly what the server has.
+        // Three devices of two people edit at random and sync in random order. They edit while a sync is under way,
+        // lose requests on the way there and answers on the way back, and restore backups. Whatever happens, once
+        // everyone has synced twice in a row, every device has exactly what the server has.
         for (var seed = 0; seed < 50; seed++)
         {
             var random = new Random(seed);
             var server = new Server();
             var devices = new[] { ("anna", new AppData()), ("anna", new AppData()), ("ben", new AppData()) };
-            var inFlight = new (PendingSync Sent, SyncResponse Answer)?[devices.Length];
+            var inFlight = new (PendingSync Sent, SyncResponse? Answer)?[devices.Length];
+            var backups = new AppData?[devices.Length];
 
             for (var step = 0; step < 200; step++)
             {
                 var d = random.Next(devices.Length);
                 var (user, phone) = devices[d];
-                switch (random.Next(3))
+                switch (random.Next(4))
                 {
                     case 0 when inFlight[d] is null:
                         var pending = phone.Synced.StartSync(user);
-                        inFlight[d] = (pending, server.Sync(user, Network(pending.Request)));
+                        var lostOnTheWay = random.Next(8) == 0;
+                        inFlight[d] = (pending, lostOnTheWay ? null : server.Sync(user, Network(pending.Request)));
                         break;
                     case 1 when inFlight[d] is { } sync:
-                        if (random.Next(4) == 0) phone.Synced.SyncFailed(sync.Sent); // the answer got lost
+                        if (sync.Answer is null || random.Next(4) == 0) phone.Synced.SyncFailed(sync.Sent); // no answer
                         else phone.Synced.CompleteSync(sync.Sent, sync.Answer, Now);
                         inFlight[d] = null;
+                        break;
+                    case 2 when random.Next(10) == 0:
+                        if (backups[d] is { } backup && random.Next(2) == 0) phone.RestoreFrom(backup);
+                        else backups[d] = DataStore.TryRead(DataStore.Backup(phone, Today));
                         break;
                     default:
                         Edit(phone, random);
@@ -488,7 +563,9 @@ public class SyncTests
             }
             for (var d = 0; d < devices.Length; d++)
             {
-                if (inFlight[d] is { } sync) devices[d].Item2.Synced.CompleteSync(sync.Sent, sync.Answer, Now);
+                if (inFlight[d] is not { } sync) continue;
+                if (sync.Answer is { } answer) devices[d].Item2.Synced.CompleteSync(sync.Sent, answer, Now);
+                else devices[d].Item2.Synced.SyncFailed(sync.Sent);
             }
             for (var round = 0; round < 2; round++)
             {
@@ -510,7 +587,7 @@ public class SyncTests
         var budget = phone.Budget;
         var amount = random.Next(1, 500);
         var date = Today.AddDays(-random.Next(60));
-        switch (random.Next(9))
+        switch (random.Next(14))
         {
             case 0: pot.Receive(date, amount); break;
             case 1: pot.Spend(date, amount, "Kleidung"); break;
@@ -518,8 +595,13 @@ public class SyncTests
             case 3 when pot.Entries.Count > 0: pot.Remove(pot.Entries[random.Next(pot.Entries.Count)].Id); break;
             case 4: pot.Configure(random.Next(1, 4), random.Next(10)); break;
             case 5: budget.SetSalary(amount * 10); break;
-            case 6: budget.AddDeduction("Miete", amount, random.Next(1, 32)); break;
+            case 6: budget.AddDeduction("Miete", amount, new MonthlyOn(random.Next(1, 32))); break;
             case 7 when budget.Deductions.Count > 0: budget.RemoveDeduction(budget.Deductions[random.Next(budget.Deductions.Count)].Id); break;
+            case 8 when budget.Deductions.Count > 0: budget.UpdateDeduction(budget.Deductions[random.Next(budget.Deductions.Count)] with { Amount = amount }); break;
+            case 9: budget.SetReserve(amount * 5, date); break;
+            case 10: budget.RemoveReserve(); break;
+            case 12: budget.AddDeduction("Kita-Essen", amount, new EveryWeeks(random.Next(1, 9), date)); break;
+            case 11 when budget.Planned.Count > 0: budget.RemovePlanned(budget.Planned[random.Next(budget.Planned.Count)].Id); break;
             default: budget.Plan(2026, random.Next(10, 13), "Geschenk", amount); break;
         }
     }

@@ -168,12 +168,13 @@ internal static class Known
     private static readonly Entry Payment = new(Guid.Parse("0e1f3d6c-6f9e-4d6d-b6b4-01b7e4501e84"), EntryKind.Payment, new(2026, 10, 12), 518, null, null);
     private static readonly Entry Jacket = new(Guid.Parse("ae0f8827-6da7-4e27-9b0d-c9a29083c3b2"), EntryKind.Spending, new(2026, 10, 14), 49.99m, "Kleidung", "Winterjacke");
     private static readonly Entry Snack = new(Guid.Parse("39931c3a-cc35-4db7-8e50-2645ee5fc17e"), EntryKind.Spending, new(2026, 10, 24), 12.5m, "Sonstiges", null);
-    private static readonly Deduction Rent = new(Guid.Parse("b7a329b6-836c-49c9-9d26-54f7ce962e39"), "Miete", 1150, 1);
-    private static readonly Deduction Phone = new(Guid.Parse("7f9c70f9-c3cc-4558-b7c3-20623773def0"), "Handy", 19.99m, 15);
+    private static readonly Deduction Rent = new(Guid.Parse("b7a329b6-836c-49c9-9d26-54f7ce962e39"), "Miete", 1150, new MonthlyOn(1));
+    private static readonly Deduction MealPlan = new(Guid.Parse("5d0f3c2a-9b7e-4c1d-8e6f-2a1b3c4d5e6f"), "Kita-Essen", 62, new EveryWeeks(4, new(2026, 10, 5)));
+    private static readonly Deduction Phone = new(Guid.Parse("7f9c70f9-c3cc-4558-b7c3-20623773def0"), "Handy", 19.99m, new MonthlyOn(15));
     private static readonly PlannedSpending MakeUp = new(Guid.Parse("b12cadf9-9224-41b8-be7e-6697c30730e9"), 2026, 10, "Make-up", 45);
 
     private static KindergeldPot FirstPot() => new(2, 4, [Payment, Jacket]);
-    private static Budget FirstBudget() => new(2850, [Rent, Phone], [MakeUp], new Reserve(2300, new(2026, 10, 24)));
+    private static Budget FirstBudget() => new(2850, [Rent, MealPlan, Phone], [MakeUp], new Reserve(2300, new(2026, 10, 24)));
 
     /// <summary>The server's documents after the first sync.</summary>
     public static SyncResponse Response() => new(FirstPot(), FirstBudget());

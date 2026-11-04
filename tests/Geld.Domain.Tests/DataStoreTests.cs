@@ -33,7 +33,7 @@ public class DataStoreTests
         var payment = data.Kindergeld.Receive(Today, 518, "Oktober");
         var jacket = data.Kindergeld.Spend(Today, 49.99m, "Kleidung", "Winterjacke");
         data.Budget.SetSalary(2850);
-        var rent = data.Budget.AddDeduction("Miete", 1150, 1);
+        var rent = data.Budget.AddDeduction("Miete", 1150, new MonthlyOn(1));
         var makeUp = data.Budget.Plan(2026, 10, "Make-up", 45);
         data.Budget.SetReserve(2300, Today);
         data.MarkBackedUp(Today);
@@ -76,7 +76,7 @@ public class DataStoreTests
     [Theory]
     [InlineData("{not json")]
     [InlineData("""{"some":"other file"}""")]
-    [InlineData("""{"schema":3,"data":{}}""")] // from a newer version of the app
+    [InlineData("""{"schema":4,"data":{}}""")] // from a newer version of the app
     [InlineData("null")]
     public void A_file_that_is_not_a_backup_of_this_version_is_rejected(string json) =>
         Assert.Null(DataStore.TryRead(json));
@@ -93,7 +93,7 @@ public class DataStoreTests
 
     [Theory]
     [InlineData("{not json")]
-    [InlineData("""{"schema":3,"data":{"kindergeld":{},"budget":{}}}""")] // after a rollback to an older version
+    [InlineData("""{"schema":4,"data":{"kindergeld":{},"budget":{}}}""")] // after a rollback to an older version
     [InlineData("""{"schema":1,"data":{"kindergeld":{"children":0},"budget":{}}}""")]
     public void Unreadable_stored_data_is_kept_aside_and_the_app_starts_fresh(string stored)
     {
@@ -181,7 +181,7 @@ public class DataStoreTests
         { "the children", data => data.Kindergeld.Configure(2, null) },
         { "the Endziffer", data => data.Kindergeld.Configure(1, 4) },
         { "the salary", data => data.Budget.SetSalary(2500) },
-        { "a fixed cost", data => data.Budget.AddDeduction("Miete", 900, 1) },
+        { "a fixed cost", data => data.Budget.AddDeduction("Miete", 900, new MonthlyOn(1)) },
         { "a planned spending", data => data.Budget.Plan(2026, 10, "Make-up", 30) },
         { "the Rücklage", data => data.Budget.SetReserve(1000, Today) },
     };

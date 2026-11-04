@@ -3,9 +3,9 @@ using Geld.Domain.SharedKernel;
 namespace Geld.Domain.Sync;
 
 /// <summary>
-/// The items of one list that a phone added, edited or removed since its last sync. Each changed item travels whole, as
-/// it is now ("entry X is 50 €", never "add 5 €"), so receiving the same changes twice gives the same result: a request
-/// repeated after a timeout does no harm.
+/// The items of one list that were added, edited or removed since the last sync. Changed items travel whole ("entry X
+/// is 50 €", never "add 5 €"), so applying the same changes twice gives the same result, and a request repeated after
+/// a timeout does no harm.
 /// </summary>
 /// <param name="Changed">Added or edited.</param>
 /// <param name="Removed">The ids of removed items.</param>
@@ -14,24 +14,26 @@ public sealed record ItemChanges<T>(IReadOnlyList<T> Changed, IReadOnlyList<Guid
     public bool IsEmpty => Changed.Count == 0 && Removed.Count == 0;
 
     /// <summary>
-    /// Edited items replace the item with the same id where it is; the others are new, and the caller puts them in
-    /// their place. Removing an item that isn't there does nothing, and an edited item that was removed meanwhile comes
-    /// back: the change that arrives last wins. The rules for the items are checked by the document they end up in.
+    /// Edited items replace the item with the same id in place. All other changed items are new, and the document decides
+    /// where they go. An item edited on one device and removed on another comes back, because the change that arrives
+    /// last wins.
     /// </summary>
+    /// <exception cref="ArgumentException">An id appears twice among the changed items.</exception>
     internal (IReadOnlyList<T> Kept, IReadOnlyList<T> Added) ApplyTo(IReadOnlyList<T> items)
     {
-        // Throws for a missing item (JSON null) and for an id that appears twice.
-        var changed = Changed.Select(i => i ?? throw new ArgumentNullException(nameof(items))).ToDictionary(i => i.Id);
+        var edited = Changed.ToDictionary(i => i.Id);
         var removed = Removed.ToHashSet();
-        IReadOnlyList<T> kept = [.. items.Where(i => !removed.Contains(i.Id)).Select(i => changed.Remove(i.Id, out var c) ? c : i)];
-        return (kept, [.. Changed.Where(i => changed.ContainsKey(i.Id)).Select(i => changed[i.Id])]);
+        List<T> kept = [.. items.Where(i => !removed.Contains(i.Id)).Select(i => edited.GetValueOrDefault(i.Id, i))];
+        var keptIds = kept.Select(i => i.Id).ToHashSet();
+        List<T> added = [.. Changed.Where(i => !keptIds.Contains(i.Id))];
+        return (kept, added);
     }
 
-    /// <summary>Both changes together; for an item in both, this one's.</summary>
+    /// <summary>For an item in both, this one's version.</summary>
     internal ItemChanges<T> Union(ItemChanges<T> other) =>
         new([.. Changed.UnionBy(other.Changed, i => i.Id)], [.. Removed.Union(other.Removed)]);
 
-    /// <summary>The same items as they are now in <paramref name="items"/>: changed if still there, removed if not.</summary>
+    /// <summary>The same items as they are now: changed if still in <paramref name="items"/>, removed if not.</summary>
     internal ItemChanges<T> Now(IReadOnlyList<T> items)
     {
         var ids = Changed.Select(i => i.Id).Concat(Removed).ToHashSet();
@@ -42,6 +44,7 @@ public sealed record ItemChanges<T>(IReadOnlyList<T> Changed, IReadOnlyList<Guid
 
 public static class ItemChanges
 {
+    // Items are records, so Except compares them by value: an item counts as changed when any of its values did.
     public static ItemChanges<T> Between<T>(IReadOnlyList<T> before, IReadOnlyList<T> after) where T : IItem =>
         new([.. after.Except(before)], [.. before.Select(i => i.Id).Except(after.Select(i => i.Id))]);
 }

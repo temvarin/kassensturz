@@ -1,0 +1,57 @@
+{
+  "schema": 2,
+  "data": {
+    "kindergeld": {
+      "children": 3,
+      "endDigit": 4,
+      "entries": [
+        {
+          "id": "39931c3a-cc35-4db7-8e50-2645ee5fc17e",
+          "kind": "Spending",
+          "date": "2026-10-24",
+          "amount": 12.5,
+          "category": "Sonstiges"
+        },
+        {
+          "id": "ae0f8827-6da7-4e27-9b0d-c9a29083c3b2",
+          "kind": "Spending",
+          "date": "2026-10-14",
+          "amount": 49.99,
+          "category": "Kleidung",
+          "note": "Winterjacke"
+        },
+        {
+          "id": "0e1f3d6c-6f9e-4d6d-b6b4-01b7e4501e84",
+          "kind": "Payment",
+          "date": "2026-10-12",
+          "amount": 518
+        }
+      ]
+    },
+    "budget": {
+      "netSalary": 2850,
+      "deductions": [
+        {
+          "id": "b7a329b6-836c-49c9-9d26-54f7ce962e39",
+          "name": "Miete",
+          "amount": 1150,
+          "day": 1
+        },
+        {
+          "id": "5d0f3c2a-9b7e-4c1d-8e6f-2a1b3c4d5e6f",
+          "name": "Kita-Essen",
+          "amount": 62,
+          "day": 5,
+          "everyWeeks": 4,
+          "first": "2026-10-05"
+        }
+      ],
+      "planned": [],
+      "reserve": {
+        "amount": 2150,
+        "asOf": "2026-10-25"
+      }
+    },
+    "lastBackup": "2026-10-25"
+  }
+}

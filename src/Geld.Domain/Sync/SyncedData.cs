@@ -4,81 +4,100 @@ using Geld.Domain.Kindergeld;
 namespace Geld.Domain.Sync;
 
 /// <summary>
-/// The synced documents on a phone, the pot and the user's budget, with what the device knows about their sync: one
-/// sync sends the changes of both, for one account. Each document is synced by its own
-/// <see cref="Replica{TDocument, TChanges, TAdapter}"/>; this pairs them and keeps the account.
+/// The synced documents on a phone (the shared pot and the user's own budget) and what the device knows about their
+/// sync. One request carries the changes of both, for one account.
 /// </summary>
 public sealed class SyncedData
 {
-    private readonly Replica<KindergeldPot, KindergeldChanges, KindergeldSync> kindergeld;
-    private readonly Replica<Budget, BudgetChanges, BudgetSync> budget;
-    private (string UserId, DateTimeOffset LastSync)? account;
+    private int restores;
 
-    // The account the unanswered changes were sent for. Only kept to be stored again as it was: the changes are sent
-    // again only for the account the data belongs to.
-    private string? unconfirmedFor;
-
-    public SyncedData() : this(new(), new(), null, null)
+    public SyncedData()
     {
     }
 
-    /// <summary>The documents as they were stored, with their last sync and their unanswered changes.</summary>
-    internal SyncedData(KindergeldPot kindergeld, Budget budget, SyncState? state, SyncRequest? unconfirmed)
+    internal SyncedData(KindergeldPot kindergeld, Budget budget, SyncState? state, SyncRequest? unconfirmed) =>
+        (Kindergeld, Budget, State, Unconfirmed) = (kindergeld, budget, state, unconfirmed);
+
+    public KindergeldPot Kindergeld { get; private set; } = new();
+    public Budget Budget { get; private set; } = new();
+
+    /// <summary>The last sync, with the documents as the server confirmed them; null until the first sync.</summary>
+    public SyncState? State { get; private set; }
+
+    /// <summary>
+    /// Changes of syncs whose answer never came, so the server may or may not have saved them. Until a sync succeeds,
+    /// the items they touched are sent again as they are now. A diff against the base alone would miss an entry that a
+    /// lost sync added on the server and that was deleted here afterwards.
+    /// </summary>
+    public SyncRequest? Unconfirmed { get; private set; }
+
+    /// <summary>Before the first sync, all data counts as unsynced.</summary>
+    public bool HasUnsyncedChanges
     {
-        this.kindergeld = new(kindergeld, state?.Kindergeld, unconfirmed?.Kindergeld);
-        this.budget = new(budget, state?.Budget, unconfirmed?.Budget);
-        account = state is null ? null : (state.UserId, state.LastSync);
-        unconfirmedFor = unconfirmed?.UserId;
+        get
+        {
+            var (kindergeld, budget) = Changes();
+            return !kindergeld.IsEmpty || !budget.IsEmpty;
+        }
     }
 
-    public KindergeldPot Kindergeld => kindergeld.Current;
-    public Budget Budget => budget.Current;
-
-    /// <summary>The last sync and the documents as the server confirmed them then; null until the first sync.</summary>
-    public SyncState? State => account is (var userId, var lastSync)
-        ? new(userId, lastSync, kindergeld.Confirmed!, budget.Confirmed!) // confirmed together with the account
-        : null;
-
-    /// <summary>The changes of syncs whose answer never came; null if there are none.</summary>
-    public SyncRequest? Unconfirmed => unconfirmedFor is { } userId
-        ? new(kindergeld.Unconfirmed!, budget.Unconfirmed!, userId) // both are set and cleared together
-        : null;
-
-    /// <summary>Whether something changed since the last sync. Before the first sync, all data counts as a change.</summary>
-    public bool HasUnsyncedChanges => !(KindergeldSync.IsEmpty(kindergeld.Changes()) && BudgetSync.IsEmpty(budget.Changes()));
-
-    /// <summary>The request for a sync: what changed since the last one (on a first sync, everything).</summary>
     /// <exception cref="InvalidOperationException">The data here was synced with another account.</exception>
     public PendingSync StartSync(string userId)
     {
-        if (account is (var syncedWith, _) && syncedWith != userId)
+        if (State is { } state && state.UserId != userId)
             throw new InvalidOperationException("The data on this device belongs to another account.");
-        return new(new SyncRequest(kindergeld.Changes(), budget.Changes(), userId), kindergeld.Snapshot(), budget.Snapshot());
+        var (kindergeld, budget) = Changes();
+        return new(new SyncRequest(kindergeld, budget, userId), Kindergeld.Copy(), Budget.Copy()) { Restores = restores };
     }
 
-    /// <summary>Takes the server's answer; the changes made here while the request was under way wait for the next sync.</summary>
     public void CompleteSync(PendingSync sent, SyncResponse answer, DateTimeOffset now)
     {
-        kindergeld.Complete(sent.Kindergeld, answer.Kindergeld);
-        budget.Complete(sent.Budget, answer.Budget);
-        (account, unconfirmedFor) = ((sent.Request.UserId, now), null);
+        if (sent.Restores != restores)
+        {
+            // A backup was restored while the request was under way. The answer predates the backup, so it is not taken
+            // over, and the next sync adds the backup like a first sync, as RestoreFrom promises.
+            (State, Unconfirmed) = (new SyncState(sent.Request.UserId, now, new KindergeldPot(), new Budget()), null);
+            return;
+        }
+
+        // The answer lacks what changed here while the request was under way. That goes on top of it again, like a
+        // git rebase, and waits for the next sync.
+        var kindergeld = KindergeldSync.Apply(answer.Kindergeld, KindergeldSync.Diff(sent.Kindergeld, Kindergeld));
+        var budget = BudgetSync.Apply(answer.Budget, BudgetSync.Diff(sent.Budget, Budget));
+        (Kindergeld, Budget, Unconfirmed) = (kindergeld, budget, null);
+        State = new SyncState(sent.Request.UserId, now, answer.Kindergeld, answer.Budget);
     }
 
-    /// <summary>No answer came: the server may or may not have saved <paramref name="sent"/>.</summary>
     public void SyncFailed(PendingSync sent)
     {
-        kindergeld.Failed(sent.Request.Kindergeld);
-        budget.Failed(sent.Request.Budget);
-        unconfirmedFor ??= sent.Request.UserId;
+        if (sent.Restores != restores) return; // sent before a backup was restored, which forgot it (RestoreFrom)
+        Unconfirmed = Unconfirmed is null
+            ? sent.Request
+            : Unconfirmed with
+            {
+                Kindergeld = Unconfirmed.Kindergeld.Union(sent.Request.Kindergeld),
+                Budget = Unconfirmed.Budget.Union(sent.Request.Budget),
+            };
     }
 
     /// <summary>
-    /// Replaces the documents with a backup's. A device that syncs stays with its account, but forgets what the server
-    /// had: the next sync then adds the backup to the shared data like a first sync.
+    /// Replaces the documents with a backup's. A synced device stays with its account but forgets what the server had,
+    /// so the next sync adds the backup like a first sync instead of removing everything the backup lacks. That includes
+    /// the unanswered changes, whose items would otherwise go out as removed.
     /// </summary>
-    public void RestoreFrom(KindergeldPot backupKindergeld, Budget backupBudget)
+    public void RestoreFrom(KindergeldPot kindergeld, Budget budget)
     {
-        kindergeld.Restore(backupKindergeld);
-        budget.Restore(backupBudget);
+        (Kindergeld, Budget, Unconfirmed) = (kindergeld, budget, null);
+        if (State is { } state) State = state with { Kindergeld = new KindergeldPot(), Budget = new Budget() };
+        restores++;
+    }
+
+    private (KindergeldChanges Kindergeld, BudgetChanges Budget) Changes()
+    {
+        var kindergeld = KindergeldSync.Diff(State?.Kindergeld ?? new KindergeldPot(), Kindergeld);
+        var budget = BudgetSync.Diff(State?.Budget ?? new Budget(), Budget);
+        if (Unconfirmed is null) return (kindergeld, budget);
+        return (kindergeld.Union(KindergeldSync.Now(Kindergeld, Unconfirmed.Kindergeld)),
+            budget.Union(BudgetSync.Now(Budget, Unconfirmed.Budget)));
     }
 }

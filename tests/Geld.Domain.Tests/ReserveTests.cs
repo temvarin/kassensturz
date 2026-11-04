@@ -10,10 +10,19 @@ public class ReserveTests
     {
         var budget = new Budget();
         budget.SetSalary(1500);
-        budget.AddDeduction("Miete", 950, 1);
-        budget.AddDeduction("Rest", 171.90m, 15);
+        budget.AddDeduction("Miete", 950, new MonthlyOn(1));
+        budget.AddDeduction("Rest", 171.90m, new MonthlyOn(15));
         if (reserve is { } amount) budget.SetReserve(amount, Today);
         return budget;
+    }
+
+    [Fact]
+    public void A_month_before_the_reserve_was_entered_has_none()
+    {
+        var budget = Example();
+
+        Assert.Null(budget.Overview(2026, 9, Today).ReserveAtStart);
+        Assert.Equal(2300m, budget.Overview(2026, 10, Today).ReserveAtStart);
     }
 
     [Fact]

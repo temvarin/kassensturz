@@ -3,11 +3,11 @@ using Geld.Domain.Sync;
 
 namespace Geld.Domain.Contracts;
 
-// The JSON of POST /api/sync, and of the unanswered changes and the sync state a phone keeps in localStorage. Changing
-// a shape here changes data that already exists (tests/Geld.Domain.Tests/Contracts/README.md).
+// The JSON of POST /api/sync, and of the sync state a phone keeps in localStorage. Changing a shape here changes data
+// that already exists (tests/Geld.Domain.Tests/Contracts/README.md).
 //
-// The IsEmpty properties are a wart: computed properties that the first versions wrote along by accident. Nothing
-// reads them, but they stay in the JSON until the format is changed on purpose.
+// The IsEmpty properties are a wart. The first versions wrote them by accident, and nothing reads them, but they stay
+// until the format changes on purpose.
 
 public sealed record ItemChangesJson<T>(IReadOnlyList<T> Changed, IReadOnlyList<Guid> Removed)
 {
@@ -38,11 +38,11 @@ public sealed record KindergeldChangesJson(KindergeldSettingsJson? Settings, Ite
         Entries.ToDomain(e => e.ToDomain()));
 }
 
-/// <param name="Reserve">null: no Rücklage.</param>
+/// <param name="Reserve">null means no Rücklage.</param>
 public sealed record BudgetSettingsJson(decimal NetSalary, ReserveJson? Reserve);
 
 /// <param name="Settings">
-/// null if unchanged. Last and optional only so that requests of protocol 2 and older, which have none, still reach the
+/// null if unchanged. It is last and optional only so that requests of protocol 2, which have none, still reach the
 /// protocol check.
 /// </param>
 public sealed record BudgetChangesJson(
@@ -61,23 +61,18 @@ public sealed record BudgetChangesJson(
         Planned.ToDomain(p => p.ToDomain()));
 }
 
-/// <summary>The body of <c>POST /api/sync</c>, and the unanswered changes a phone keeps (<see cref="SyncedData.Unconfirmed"/>).</summary>
+/// <summary>The body of <c>POST /api/sync</c>, and the unanswered changes a phone keeps.</summary>
 /// <param name="Protocol">
-/// The shape of these requests and of the documents. Installed apps keep running an old version until they are
-/// restarted, and an old version might drop what it doesn't know when it sends data back; so the server refuses
-/// requests of another protocol. Raise <see cref="CurrentProtocol"/> whenever that shape changes in a way older apps
-/// can't take part in. That includes a new field in an item or in the settings: changed items and settings travel
-/// whole, so an older app would send them without it and clear it. Only a new optional part of the request, which
-/// older apps never send, doesn't count. Protocol 3 (2026-11-03): the budget's salary and Rücklage became one settings
-/// record.
+/// Installed apps run an old version until they restart, and an old version would drop fields it doesn't know. So the
+/// server refuses any other protocol, and <see cref="CurrentProtocol"/> goes up whenever the shape changes in a way
+/// older apps can't follow. A new field in an item or in the settings counts, because those travel whole. Protocol 3
+/// (2026-11-03) made the budget's salary and Rücklage one settings record; protocol 4 (2026-11-04) lets fixed costs
+/// repeat every few weeks.
 /// </param>
-/// <param name="UserId">
-/// The account the phone's data belongs to (see <see cref="SyncRequest.UserId"/>). Optional only so that requests of
-/// older apps, which don't send it, still reach the protocol check.
-/// </param>
+/// <param name="UserId">Optional only so that requests of older apps, which have none, still reach the protocol check.</param>
 public sealed record SyncRequestJson(int Protocol, KindergeldChangesJson Kindergeld, BudgetChangesJson Budget, string? UserId = null)
 {
-    public const int CurrentProtocol = 3;
+    public const int CurrentProtocol = 4;
 
     public bool IsEmpty => Kindergeld.IsEmpty && Budget.IsEmpty;
 

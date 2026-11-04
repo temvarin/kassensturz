@@ -8,10 +8,10 @@ public class BudgetTests
     {
         var budget = new Budget();
         budget.SetSalary(2850);
-        budget.AddDeduction("Fitnessstudio", 29.90m, 28);
-        budget.AddDeduction("Miete", 1150, 1);
-        budget.AddDeduction("Handy", 20, 15);
-        budget.AddDeduction("Spotify", 11.99m, 3);
+        budget.AddDeduction("Fitnessstudio", 29.90m, new MonthlyOn(28));
+        budget.AddDeduction("Miete", 1150, new MonthlyOn(1));
+        budget.AddDeduction("Handy", 20, new MonthlyOn(15));
+        budget.AddDeduction("Spotify", 11.99m, new MonthlyOn(3));
         return budget;
     }
 
@@ -60,7 +60,7 @@ public class BudgetTests
     public void A_deduction_on_the_31st_falls_on_the_last_day_of_a_shorter_month()
     {
         var budget = new Budget();
-        budget.AddDeduction("Versicherung", 46.30m, 31);
+        budget.AddDeduction("Versicherung", 46.30m, new MonthlyOn(31));
 
         Assert.Equal(new DateOnly(2027, 2, 28), budget.Overview(2027, 2, Today).Deductions.Single().Date);
         Assert.Equal(new DateOnly(2026, 11, 30), budget.Overview(2026, 11, Today).Deductions.Single().Date);
@@ -84,7 +84,7 @@ public class BudgetTests
         var budget = Example();
         var rent = budget.Deductions.Single(d => d.Name == "Miete");
 
-        budget.UpdateDeduction(rent with { Amount = 1200, Day = 20 });
+        budget.UpdateDeduction(rent with { Amount = 1200, Schedule = new MonthlyOn(20) });
 
         Assert.Equal(["Spotify", "Handy", "Miete", "Fitnessstudio"], budget.Deductions.Select(d => d.Name));
         Assert.Equal(1200m, budget.Deductions.Single(d => d.Id == rent.Id).Amount);
@@ -109,5 +109,5 @@ public class BudgetTests
     [InlineData("Miete", 10, 0)]
     [InlineData("Miete", 10, 32)]
     public void Rejects_a_deduction_without_name_amount_or_valid_day(string name, int amount, int day) =>
-        Assert.ThrowsAny<ArgumentException>(() => new Budget().AddDeduction(name, amount, day));
+        Assert.ThrowsAny<ArgumentException>(() => new Budget().AddDeduction(name, amount, new MonthlyOn(day)));
 }

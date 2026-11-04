@@ -21,13 +21,19 @@ internal static class ItemListExtensions
 
     public static string? Optional(this string? text) => string.IsNullOrWhiteSpace(text) ? null : text.Trim();
 
-    /// <summary>Each item checked by <paramref name="valid"/>, which throws for one that breaks the rules.</summary>
+    /// <summary>Each item as <paramref name="check"/> returns it. The check throws for an item that breaks the rules.</summary>
     /// <exception cref="ArgumentException">An item is missing (null), or an id appears twice.</exception>
-    public static IReadOnlyList<T> Valid<T>(this IEnumerable<T> items, Func<T, T> valid) where T : IItem
+    public static IReadOnlyList<T> Valid<T>(this IEnumerable<T> items, Func<T, T> check) where T : IItem
     {
-        IReadOnlyList<T> checkedItems = [.. items.Select(i => valid(i ?? throw new ArgumentNullException(nameof(items))))];
-        return checkedItems.DistinctBy(i => i.Id).Count() == checkedItems.Count
-            ? checkedItems
-            : throw new ArgumentException("An id appears twice.", nameof(items));
+        var valid = new List<T>();
+        var ids = new HashSet<Guid>();
+        foreach (var item in items)
+        {
+            var checkedItem = check(item ?? throw new ArgumentNullException(nameof(items)));
+            if (checkedItem.Id == Guid.Empty) throw new ArgumentException("An item has no id.", nameof(items));
+            if (!ids.Add(checkedItem.Id)) throw new ArgumentException($"The id {checkedItem.Id} appears twice.", nameof(items));
+            valid.Add(checkedItem);
+        }
+        return valid;
     }
 }

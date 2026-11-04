@@ -13,7 +13,6 @@ public sealed record CategoryTotal(string Category, decimal Amount);
 
 public sealed record MonthTotals(int Year, int Month, decimal In, decimal Out);
 
-/// <summary>The pot for reading: everything it shows and computes, nothing that changes it.</summary>
 public interface IReadOnlyKindergeldPot
 {
     int Children { get; }
@@ -29,11 +28,7 @@ public interface IReadOnlyKindergeldPot
     IReadOnlyList<MonthTotals> MonthlyTotals(DateOnly today, int months);
 }
 
-/// <summary>
-/// The Kindergeld as one pot for all children: payments go in, spendings for the children go out.
-/// Persisted as part of <see cref="AppData"/>, in the shape of Contracts.KindergeldJson.
-/// </summary>
-/// <remarks>State changes only through its methods, which keep its rules.</remarks>
+/// <summary>The Kindergeld as one pot for all children. Payments go in, spendings for the children go out.</summary>
 public sealed class KindergeldPot : IReadOnlyKindergeldPot
 {
     public const string DefaultCategory = "Sonstiges";
@@ -46,9 +41,7 @@ public sealed class KindergeldPot : IReadOnlyKindergeldPot
     {
     }
 
-    /// <summary>
-    /// A pot as it was saved, restored by the same rules as entering it: a pot that exists keeps them.
-    /// </summary>
+    /// <summary>Restores a saved pot through the same rules as entering one.</summary>
     /// <param name="entries">Newest first, as <see cref="Entries"/>.</param>
     /// <exception cref="ArgumentException">Something breaks the rules, e.g. a negative amount or an id twice.</exception>
     public KindergeldPot(int children, int? endDigit, IEnumerable<Entry> entries)
@@ -59,7 +52,7 @@ public sealed class KindergeldPot : IReadOnlyKindergeldPot
 
     public int Children { get; private set; } = 1;
 
-    /// <summary>Last digit of the Kindergeldnummer; decides the payment dates. Unknown until the user enters it.</summary>
+    /// <summary>Last digit of the Kindergeldnummer, which decides the payment dates; null until the user enters it.</summary>
     public int? EndDigit { get; private set; }
 
     /// <summary>Newest first.</summary>
@@ -88,16 +81,15 @@ public sealed class KindergeldPot : IReadOnlyKindergeldPot
     public Entry Spend(DateOnly date, decimal amount, string? category, string? note = null) =>
         Add(new Entry(Guid.NewGuid(), EntryKind.Spending, date, amount, category, note));
 
-    /// <summary>Replaces the entry with the same id, e.g. after correcting a typo.</summary>
     public void Update(Entry entry) => Entries = Sorted(Entries.Replacing(Valid(entry)));
 
     public void Remove(Guid id) => Entries = Entries.Without(id);
 
-    /// <summary>Categories to suggest: the presets, then the user's own in alphabetical order.</summary>
+    /// <summary>The presets, then the user's own categories in alphabetical order.</summary>
     public IReadOnlyList<string> CategorySuggestions() =>
         [.. PresetCategories.Concat(Entries
             .Select(e => e.Category).OfType<string>()
-            .Except(PresetCategories).Distinct().Order(StringComparer.CurrentCultureIgnoreCase))];
+            .Except(PresetCategories, StringComparer.CurrentCultureIgnoreCase).Order(StringComparer.CurrentCultureIgnoreCase))];
 
     /// <summary>Spending per category between two dates (both included), largest first.</summary>
     public IReadOnlyList<CategoryTotal> SpendingByCategory(DateOnly first, DateOnly last) =>
@@ -122,10 +114,7 @@ public sealed class KindergeldPot : IReadOnlyKindergeldPot
         })];
     }
 
-    /// <summary>
-    /// An independent copy, e.g. what a sync started from. Entries are values, and every change replaces a list rather
-    /// than changing it, so the lists can be shared.
-    /// </summary>
+    /// <summary>An independent copy. The list can be shared, because entries are values and lists are replaced, never changed.</summary>
     public KindergeldPot Copy() => new() { Children = Children, EndDigit = EndDigit, Entries = Entries };
 
     private Entry Add(Entry entry)
@@ -146,7 +135,7 @@ public sealed class KindergeldPot : IReadOnlyKindergeldPot
         };
     }
 
-    // Stable: among entries of the same day, the one listed first stays on top (Add puts the newest first).
+    // A stable sort, so among entries of one day the newest stays on top (Add puts it first).
     private static IReadOnlyList<Entry> Sorted(IEnumerable<Entry> entries) => [.. entries.OrderByDescending(e => e.Date)];
 
     private decimal Total(EntryKind kind) => Entries.Where(e => e.Kind == kind).Sum(e => e.Amount);
