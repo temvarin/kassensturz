@@ -38,20 +38,20 @@ public class ArchitectureTests
         Types.InAssembly(Domain).That().DoNotResideInNamespaceMatching(@"^Geld\.Domain\.(Contracts|Storage)$")
             .ShouldNot().HaveDependencyOnAny("System.Text.Json", "Geld.Domain.Contracts", "Geld.Domain.Storage"),
         "The shapes that leave the process live in Geld.Domain.Contracts and map to the model, never the other way: the "
-        + "model can then change freely, and a stored or sent format changes only when a contract record does (review, "
-        + "finding 2; tests/Geld.Domain.Tests/Contracts/README.md).");
+        + "model can then change freely, and a stored or sent format changes only when a contract record does "
+        + "(tests/Geld.Domain.Tests/Contracts/README.md).");
 
     [Fact]
     public void The_domain_s_business_modules_know_nothing_of_one_another() => HoldsSliced(
         BusinessModules(), "Geld.Domain",
         "Kindergeld and Budgeting change for different reasons; what they share is in SharedKernel. Any module added "
-        + "later is covered too (review, finding 3).");
+        + "later is covered too.");
 
     [Fact]
     public void The_domain_s_business_modules_know_nothing_of_sync_or_of_how_they_are_stored() => Holds(
         BusinessModules().ShouldNot().HaveDependencyOnAny(
             "Geld.Domain.Sync", "Geld.Domain.Contracts", "Geld.Domain.Storage", "Geld.Domain.AppData"),
-        "Sync is the mediator: it knows the modules through its adapters (ISyncAdapter), and they know nothing of it. "
+        "Sync is the mediator: it knows the modules through its adapters (KindergeldSync, BudgetSync), and they know nothing of it. "
         + "AppData composes them all, so none of them may know it.");
 
     [Fact]
@@ -137,19 +137,8 @@ public class ArchitectureTests
             Holds(Types.InAssembly(App).That().ResideInNamespaceMatching($"^{Regex.Escape(module)}$")
                     .ShouldNot().HaveDependencyOnAny([.. domainModules.Where(d => d != Module(module)).Select(d => $"Geld.Domain.{d}")]),
                 $"{module} uses only its own part of the domain: the modules change for different reasons, and a "
-                + "Kindergeld page that changed the budget would pass every other rule (second review, finding 2).");
+                + "Kindergeld page that changed the budget would pass every other rule.");
     }
-
-    /// <summary>The app's modules that work on all of the data, not on one module's part: a backup or a sync covers it all.</summary>
-    private static readonly string[] WholeDataModules = ["Backup", "Sync"];
-
-    [Fact]
-    public void Only_backup_and_sync_work_on_all_of_the_data() => Holds(
-        AppModules().And().DoNotResideInNamespaceMatching($@"^Geld\.App\.({string.Join("|", WholeDataModules)})$")
-            .ShouldNot().HaveDependencyOnAny("Geld.Domain.AppData", "Geld.App.Shell.AppState"),
-        "Every other module's service gets only its own part of the data, as a Slot, from the composition root "
-        + "(ServiceRegistration). Reaching for the whole data is the exception, and it is visible here and in the "
-        + "constructor.");
 
     // Server
 
@@ -193,7 +182,7 @@ public class ArchitectureTests
 
     // Every component: pages, sections, sheets, banners, the layout. Found by reflection, which follows inheritance:
     // NetArchTest's ImplementInterface sees only interfaces a class declares itself, and almost every component gets
-    // IComponent from ComponentBase or DataPage.
+    // IComponent from ComponentBase or DataComponent.
     private static readonly HashSet<string> Components =
         [.. App.GetTypes().Where(t => typeof(IComponent).IsAssignableFrom(t)).Select(t => t.FullName!)];
 

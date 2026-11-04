@@ -38,10 +38,10 @@ jobs:
           dotnet-version: 10.0.x
       # Relinks the WebAssembly runtime without culture data (InvariantGlobalization in Geld.App.csproj).
       - run: dotnet workload install wasm-tools
-      - run: dotnet test
+      - run: dotnet test -c Release
       # The server, with the Blazor app in its wwwroot.
       - run: dotnet publish src/Geld.Server -c Release -o publish
-      # Exactly what was tested is what gets deployed. Kept for 90 days: re-running the deploy job of an earlier run
+      # The Release build that passed the tests is what gets deployed. Kept for 90 days: re-running the deploy job of an earlier run
       # puts that version back (see README, Deployment).
       - uses: actions/upload-artifact@v7
         with:
