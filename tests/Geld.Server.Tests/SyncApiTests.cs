@@ -14,7 +14,9 @@ public class SyncApiTests(WebApplicationFactory<Program> factory) : IClassFixtur
 
     private readonly MemoryDocumentStore documents = new();
 
-    private HttpClient Server() => factory.WithWebHostBuilder(host =>
+    private HttpClient? client;
+
+    private HttpClient Server() => client ??= factory.WithWebHostBuilder(host =>
     {
         host.UseSetting("WEBSITE_AUTH_ENABLED", "True");
         host.UseSetting("Geld:Members", "anna,ben");
@@ -190,5 +192,5 @@ public class SyncApiTests(WebApplicationFactory<Program> factory) : IClassFixtur
         Assert.Empty(documents.Ids);
     }
 
-    private static KindergeldPot Apply(AppData phone) => KindergeldSync.Apply(new(), Changes(phone).Kindergeld);
+    private static KindergeldPot Apply(AppData phone) => KindergeldSync.Apply(new KindergeldPot(), Changes(phone).Kindergeld);
 }

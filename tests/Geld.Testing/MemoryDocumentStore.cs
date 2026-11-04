@@ -9,8 +9,15 @@ namespace Geld.Testing;
 public sealed class MemoryDocumentStore : IDocumentStore
 {
     private readonly Dictionary<string, StoredDocument> stored = [];
+    private readonly Lock gate = new(); // the server answers requests on several threads
 
-    public IEnumerable<string> Ids => stored.Keys.Order(StringComparer.Ordinal);
+    public IEnumerable<string> Ids
+    {
+        get
+        {
+            lock (gate) return [.. stored.Keys.Order(StringComparer.Ordinal)];
+        }
+    }
 
     /// <summary>How often each document was saved.</summary>
     public Dictionary<string, int> Saves { get; } = [];
@@ -18,8 +25,10 @@ public sealed class MemoryDocumentStore : IDocumentStore
     /// <summary>Another phone's save, just after this request read the document.</summary>
     public Func<Task>? BeforeNextSave { get; set; }
 
-    public Task<StoredDocument?> GetAsync(string id, CancellationToken cancellationToken = default) =>
-        Task.FromResult(stored.GetValueOrDefault(id));
+    public Task<StoredDocument?> GetAsync(string id, CancellationToken cancellationToken = default)
+    {
+        lock (gate) return Task.FromResult(stored.GetValueOrDefault(id));
+    }
 
     public async Task<bool> TrySaveAsync(string id, string json, int expectedVersion, CancellationToken cancellationToken = default)
     {
@@ -28,9 +37,12 @@ public sealed class MemoryDocumentStore : IDocumentStore
             BeforeNextSave = null;
             await other();
         }
-        if ((stored.GetValueOrDefault(id)?.Version ?? 0) != expectedVersion) return false;
-        stored[id] = new StoredDocument(json, expectedVersion + 1);
-        Saves[id] = Saves.GetValueOrDefault(id) + 1;
-        return true;
+        lock (gate)
+        {
+            if ((stored.GetValueOrDefault(id)?.Version ?? 0) != expectedVersion) return false;
+            stored[id] = new StoredDocument(json, expectedVersion + 1);
+            Saves[id] = Saves.GetValueOrDefault(id) + 1;
+            return true;
+        }
     }
 }

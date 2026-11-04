@@ -3,6 +3,7 @@
   <ItemGroup>
     <!-- Served as static files: the browser runs the app, this server only hosts it. -->
     <ProjectReference Include="..\Geld.App\Geld.App.csproj" />
+    <ProjectReference Include="..\Geld.Domain\Geld.Domain.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -3,32 +3,29 @@ using Microsoft.Data.SqlClient;
 
 namespace Geld.Server.Sync;
 
-/// <summary>A synced document as stored, with the version it is at.</summary>
 public sealed record StoredDocument(string Json, int Version);
 
 /// <summary>
-/// The synced documents: <c>kindergeld</c>, shared by the family, and <c>budget:{user id}</c>, one per member. Each
-/// document is small and always read and written whole.
+/// The synced documents: <c>kindergeld</c>, shared by the family, and <c>budget:{user id}</c>, one per member. They are
+/// small and always read and written whole.
 /// </summary>
 public interface IDocumentStore
 {
     Task<StoredDocument?> GetAsync(string id, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Saves the document, but only if it is still at <paramref name="expectedVersion"/>, the version the change is
-    /// based on (0: the document doesn't exist yet). That way two phones writing at the same time can't overwrite each
-    /// other's change unnoticed (a lost update).
+    /// Saves only if the document is still at <paramref name="expectedVersion"/> (0 for a new one), so two phones saving at
+    /// once can't overwrite each other unnoticed.
     /// </summary>
-    /// <returns>false if someone else saved first: load the document again, apply the change to it, and retry.</returns>
+    /// <returns>false if someone else saved first. Then read again, apply the change again and retry.</returns>
     Task<bool> TrySaveAsync(string id, string json, int expectedVersion, CancellationToken cancellationToken = default);
 }
 
 /// <summary>The documents in Azure SQL (db/schema.sql).</summary>
 public sealed class DocumentStore(string connectionString) : IDocumentStore
 {
-    // Azure SQL is unavailable for moments now and then (maintenance, failover; a serverless database also for up to a
-    // minute while it wakes from a pause). SqlClient retries opening on such errors (40613 "database not currently
-    // available" among them).
+    // Azure SQL is briefly unavailable now and then (maintenance, failover). SqlClient retries opening on such errors,
+    // 40613 "database not currently available" among them.
     private static readonly SqlRetryLogicBaseProvider Retry = SqlConfigurableRetryFactory.CreateFixedRetryProvider(
         new SqlRetryLogicOption { NumberOfTries = 8, DeltaTime = TimeSpan.FromSeconds(10) });
 
@@ -47,12 +44,12 @@ public sealed class DocumentStore(string connectionString) : IDocumentStore
             ? "INSERT INTO dbo.Documents (Id, Json, Version) VALUES (@Id, @Json, 1)"
             : "UPDATE dbo.Documents SET Json = @Json, Version = Version + 1 WHERE Id = @Id AND Version = @Version", id);
         command.Parameters.Add("@Json", SqlDbType.NVarChar, -1).Value = json;
-        command.Parameters.Add("@Version", SqlDbType.Int).Value = expectedVersion;
+        if (expectedVersion != 0) command.Parameters.Add("@Version", SqlDbType.Int).Value = expectedVersion;
         try
         {
             return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
         }
-        catch (SqlException e) when (e.Number == 2627) // the primary key: someone else created the document first
+        catch (SqlException e) when (e.Number == 2627) // primary key: someone else created the document first
         {
             return false;
         }

@@ -7,33 +7,32 @@ builder.Services.AddFamilySignIn();
 #pragma warning disable RS0030 // The composition root: the one place that picks the real clock.
 builder.Services.AddSingleton(TimeProvider.System);
 #pragma warning restore RS0030
-// Azure SQL; the connection string has no password: the Web App logs in with its managed identity.
-builder.Services.AddSingleton<IDocumentStore>(services => new DocumentStore(services.GetRequiredService<IConfiguration>().GetConnectionString("Geld")
-    ?? throw new InvalidOperationException("The connection string Geld is missing.")));
+// The connection string has no password, because the Web App logs in to Azure SQL with its managed identity.
+builder.Services.AddSingleton<IDocumentStore>(services => new DocumentStore(
+    services.GetRequiredService<IConfiguration>().GetConnectionString("Geld")
+        ?? throw new InvalidOperationException("The connection string Geld is missing.")));
 var app = builder.Build();
 
 app.UseSecurityHeaders();
-// Placed explicitly after the protections, so that its answers (401, 403) carry them too.
+// After the security headers, so that 401 and 403 answers carry them too.
 app.UseAuthentication();
 app.UseAuthorization();
 
-// The Blazor app's files, served with their pre-compressed variants and caching headers.
 app.MapStaticAssets();
 
 app.MapWhoAmI();
-// Everything else under /api is for members only, including endpoints added later: Easy Auth lets everyone through
-// to this app (which must load without signing in), so this is the gate.
+// Everything else under /api is for members only, endpoints added later included. Easy Auth lets everyone through,
+// because the app must load without a sign-in, so this is the gate.
 var api = app.MapGroup("/api").RequireAuthorization(Members.Policy);
 // Shows that the database answers, and how often the shared pot has been saved.
 api.MapGet("/status", async (IDocumentStore documents, CancellationToken cancellationToken) =>
     new { KindergeldVersion = (await documents.GetAsync("kindergeld", cancellationToken))?.Version });
-// The phones' changes in, the current documents out.
 api.MapPost("/sync", SyncEndpoint.Handle);
 // Unknown API routes are errors, not app pages.
 api.Map("{**path}", () => Results.NotFound());
 
-// Routes like /budget exist only inside the app: answer them with its start page, which must never be cached
-// so that a new release is picked up.
+// Routes like /budget exist only inside the app. The start page answers them and is never cached, so that a new
+// release is picked up.
 app.MapFallbackToFile("index.html", new StaticFileOptions
 {
     OnPrepareResponse = context => context.Context.Response.Headers.CacheControl = "no-cache",

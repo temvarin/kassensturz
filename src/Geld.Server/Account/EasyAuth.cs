@@ -7,13 +7,12 @@ using Microsoft.Net.Http.Headers;
 namespace Geld.Server.Account;
 
 /// <summary>
-/// Authentication, "who is calling?". The sign-in itself is done by App Service's Easy Auth, which runs in front of this
-/// app: it signs the user in with Microsoft, keeps the session, and passes the user on in request headers. It removes
-/// these headers from requests coming from outside, so they can only come from Easy Auth.
+/// Who is calling. App Service's Easy Auth runs in front of this app, signs the user in with Microsoft and passes the
+/// user on in request headers, which it strips from requests coming from outside.
 /// </summary>
 /// <remarks>
-/// On a developer's machine there is no Easy Auth: there, the setting <c>Geld:DevUser</c> (launchSettings.json) signs
-/// every request in as that user id. Only in the Development environment, which App Service never runs in.
+/// A developer's machine has no Easy Auth. There, in the Development environment only, the setting <c>Geld:DevUser</c>
+/// signs every request in as that user.
 /// </remarks>
 public sealed class EasyAuth(
     IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, UrlEncoder encoder,
@@ -28,7 +27,7 @@ public sealed class EasyAuth(
             return Task.FromResult(SignedIn(devUser, "dev@localhost"));
 
         var id = Request.Headers["X-MS-CLIENT-PRINCIPAL-ID"].ToString();
-        // Without Easy Auth nobody removes the headers and anyone could send them. App Service sets this variable
+        // Without Easy Auth nobody strips the headers, and anyone could send them. App Service sets this variable
         // while Easy Auth is on.
         var easyAuthOn = string.Equals(configuration["WEBSITE_AUTH_ENABLED"], "true", StringComparison.OrdinalIgnoreCase);
         if (id.Length == 0 || !easyAuthOn) return Task.FromResult(AuthenticateResult.NoResult());
@@ -36,20 +35,18 @@ public sealed class EasyAuth(
         return Task.FromResult(SignedIn(id, Request.Headers["X-MS-CLIENT-PRINCIPAL-NAME"].ToString()));
     }
 
-    /// <summary>How long Easy Auth accepts a session: its setting <c>login.cookieExpiration</c>, fixed from the sign-in.</summary>
+    /// <summary>Easy Auth's setting <c>login.cookieExpiration</c>, counted from the sign-in.</summary>
     public static readonly TimeSpan SessionLifetime = TimeSpan.FromDays(30);
 
     private const string SessionCookie = "AppServiceAuthSession";
 
     /// <summary>
-    /// Easy Auth gives its session cookie no expiry date, so the browser deletes it when its session ends: on a phone,
-    /// when the installed app is closed. This sends the cookie back unchanged, with an expiry date, so that the phone
-    /// keeps it for as long as Easy Auth accepts it. Easy Auth still decides: it refuses a session older than
-    /// <see cref="SessionLifetime"/> and deletes the cookie then, as it does when signing out.
+    /// Easy Auth's session cookie has no expiry date, so a phone drops it when the installed app is closed. This sends it
+    /// back unchanged with an expiry date. Easy Auth still refuses a session older than <see cref="SessionLifetime"/>.
     /// </summary>
     public static void KeepSession(HttpContext context, TimeProvider clock)
     {
-        // The value as it came: ASP.NET's cookie collections decode and encode values, which could change it.
+        // Read raw, because ASP.NET's cookie collections decode and encode values, which could change it.
         if (!CookieHeaderValue.TryParseList(context.Request.Headers.Cookie, out var cookies)) return;
         if (cookies.FirstOrDefault(cookie => cookie.Name == SessionCookie) is not { } session) return;
         context.Response.Headers.Append(HeaderNames.SetCookie, new SetCookieHeaderValue(SessionCookie, session.Value)
