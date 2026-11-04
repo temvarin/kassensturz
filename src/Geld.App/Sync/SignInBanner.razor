@@ -1,5 +1,4 @@
-@* Shown when a phone that syncs has been signed out, e.g. when the session expired: until the user signs in again,
-   changes stay on this phone. A phone that never synced uses the app without an account, which is nothing to warn about. *@
+@* Only for a phone that has synced before. One that never did uses the app without an account, which is fine. *@
 @implements IDisposable
 @inject SyncService Sync
 @inject AccountService Account
@@ -21,7 +20,7 @@
 
     private void OnChanged() => _ = InvokeAsync(StateHasChanged);
 
-    // Easy Auth's page, not the app's: a full page load takes the user there and back to this page.
+    // Easy Auth's page, not the app's, so a full page load is needed.
     private void SignIn() => Navigation.NavigateTo(
         $"/.auth/login/aad?post_login_redirect_uri=/{Navigation.ToBaseRelativePath(Navigation.Uri)}", forceLoad: true);
 }

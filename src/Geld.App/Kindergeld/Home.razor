@@ -1,6 +1,5 @@
 @page "/"
-@inherits DataPage
-@inject TimeProvider Clock
+@inherits DataComponent
 @inject KindergeldService Kindergeld
 
 <TopBar Title="Kindergeld" Kicker="@Kicker" />
@@ -74,14 +73,20 @@ else
 }
 
 @code {
-    private DateOnly Today => Clock.Today(); // never stored: the app may stay open across midnight
     private EntryKind? sheetKind;
     private Entry? editing;
 
     private IReadOnlyKindergeldPot Pot => Kindergeld.Pot;
 
-    private string Kicker =>
-        $"{Pot.Children} {(Pot.Children == 1 ? "Kind" : "Kinder")} · {(Pot.EndDigit is { } d ? $"Endziffer {d}" : "Endziffer fehlt")}";
+    private string Kicker
+    {
+        get
+        {
+            var children = Pot.Children == 1 ? "1 Kind" : $"{Pot.Children} Kinder";
+            var endDigit = Pot.EndDigit is { } digit ? $"Endziffer {digit}" : "Endziffer fehlt";
+            return $"{children} · {endDigit}";
+        }
+    }
 
     private void Open(EntryKind kind) => (sheetKind, editing) = (kind, null);
 

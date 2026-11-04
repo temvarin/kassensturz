@@ -5,48 +5,42 @@ using Geld.Domain.Contracts;
 
 namespace Geld.App.Sync;
 
-/// <summary>The signed-in user, as the app shows it; the server says it as Contracts.WhoAmI.</summary>
-/// <param name="Id">The id Microsoft gives the user, which the server's members list holds.</param>
+/// <param name="Id">The id Microsoft gives the user, as listed in the server's members setting.</param>
 /// <param name="Name">For display only, usually the email address.</param>
-/// <param name="Member">Whether the user is one of the family's members.</param>
 public sealed record Account(string Id, string Name, bool Member);
 
 public enum AccountStatus
 {
-    /// <summary>Asking the server who is signed in.</summary>
     Checking,
 
-    /// <summary>No answer: offline, or the development server, which has no API.</summary>
+    /// <summary>No answer, because the phone is offline or the development server has no API.</summary>
     Unreachable,
 
     SignedOut,
 
-    /// <summary>Signed in, but not on the server's members list.</summary>
     NotMember,
 
-    /// <summary>The data on this device was synced with another account; it is never synced with this one.</summary>
+    /// <summary>The data here was synced with another account, and is never synced with this one.</summary>
     OtherAccount,
 
-    /// <summary>Signed in as a member whose data this is (or a device that never synced): the sync may run.</summary>
+    /// <summary>A member whose data this is, or a device that never synced. The sync may run.</summary>
     SignedIn,
 }
 
 /// <summary>
-/// Who is signed in on this device, and whether that account may sync this device's data. Part of the sync module: in
-/// the app, the account exists only for the sync. Signing in itself happens outside the app, at App Service's Easy
-/// Auth.
+/// Who is signed in, and whether that account may sync the data on this device. It belongs to the sync module because
+/// in the app the account exists only for the sync. Signing in happens outside the app, at App Service's Easy Auth.
 /// </summary>
 public sealed class AccountService(AppState state, HttpClient http)
 {
     public AccountStatus Status { get; private set; }
 
-    /// <summary>The signed-in user; null if signed out or not known.</summary>
+    /// <summary>null if signed out or not known.</summary>
     public Account? Me { get; private set; }
 
-    /// <summary>When <see cref="Status"/> or <see cref="Me"/> changes.</summary>
     public event Action? Changed;
 
-    /// <summary>Asks the server who is signed in (<c>/api/whoami</c>).</summary>
+    /// <summary>Asks <c>/api/whoami</c>.</summary>
     public async Task CheckAsync()
     {
         Set(AccountStatus.Checking, Me);
@@ -74,10 +68,10 @@ public sealed class AccountService(AppState state, HttpClient http)
         }
     }
 
-    /// <summary>The server said so during a sync: the sign-in has expired.</summary>
+    /// <summary>A sync found the sign-in expired.</summary>
     public void SignedOut() => Set(AccountStatus.SignedOut, null);
 
-    /// <summary>The server said so during a sync: the user was taken off the members list.</summary>
+    /// <summary>A sync found the user taken off the members list.</summary>
     public void NotMember() => Set(AccountStatus.NotMember, Me);
 
     private void Set(AccountStatus status, Account? me)

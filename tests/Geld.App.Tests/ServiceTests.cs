@@ -47,14 +47,14 @@ public class ServiceTests : AppTestContext
     [Fact]
     public void An_edited_fixed_cost_that_a_sync_removed_meanwhile_is_saved_as_a_new_one()
     {
-        Budget.SaveDeduction(null, "Handy", 19.99m, 15);
+        Budget.SaveDeduction(null, "Handy", 19.99m, new MonthlyOn(15));
         var phone = Budget.Budget.Deductions.Single();
         State.Change(data => data.Budget.RemoveDeduction(phone.Id)); // what a sync does when the other phone deleted it
 
-        Budget.SaveDeduction(phone.Id, "Handy", 24.99m, 15);
+        Budget.SaveDeduction(phone.Id, "Handy", 24.99m, new MonthlyOn(15));
 
         var saved = Assert.Single(Stored.Budget.Deductions);
-        Assert.Equal(("Handy", 24.99m, 15), (saved.Name, saved.Amount, saved.Day));
+        Assert.Equal(("Handy", 24.99m, new MonthlyOn(15)), (saved.Name, saved.Amount, saved.Schedule));
     }
 
     [Fact]

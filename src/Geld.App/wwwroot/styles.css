@@ -121,7 +121,11 @@ main {
 .card { display: block; width: 100%; padding: 16px; margin-bottom: 16px; text-align: left; }
 .card > :first-child { margin-top: 0; }
 .card > :last-child { margin-bottom: 0; }
-button.card, a.card { cursor: pointer; text-decoration: none; transition: transform 100ms ease-out, box-shadow 100ms ease-out; }
+button.card, a.card, .card.tappable { cursor: pointer; text-decoration: none; transition: transform 100ms ease-out, box-shadow 100ms ease-out; }
+/* A card with block content can't be a button, so a button covers it instead. */
+.card.tappable { position: relative; }
+.card.tappable > .cover { position: absolute; inset: 0; margin: 0; padding: 0; border: 0; border-radius: inherit; background: none; cursor: pointer; }
+.card.tappable:has(> .cover:active) { transform: translate(3px, 3px); box-shadow: none; }
 
 .muted { color: var(--muted); font-size: 15px; }
 .hint { color: var(--muted); font-size: 14px; margin: 8px 0 0; }
@@ -218,6 +222,7 @@ button.banner { width: 100%; font-family: inherit; text-align: left; cursor: poi
 
 /* Statistics: ranked bars in one colour */
 .segmented { display: grid; grid-template-columns: repeat(3, 1fr); margin-bottom: 16px; border: 2px solid var(--ink); border-radius: var(--radius); overflow: hidden; box-shadow: 3px 3px 0 var(--ink); }
+.segmented.two { grid-template-columns: repeat(2, 1fr); }
 .segmented button { min-height: 44px; border: 0; background: var(--surface); font-weight: 700; cursor: pointer; }
 .segmented button + button { border-left: 2px solid var(--ink); }
 .segmented button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
@@ -228,7 +233,7 @@ button.banner { width: 100%; font-family: inherit; text-align: left; cursor: poi
 .months { display: grid; margin-top: 12px; grid-template-columns: 2.6em 1fr auto; gap: 6px 10px; align-items: center; font-size: 14px; }
 .months .pair-bars { display: grid; gap: 3px; }
 .months .pair-bars > div { height: 8px; min-width: 0; border-radius: 99px; }
-.months .in { background: var(--ink); }
+.months .in, .legend .in { background: var(--ink); }
 .months .out { border: 2px solid var(--ink); background: var(--surface); }
 .months .amount { text-align: right; }
 
@@ -278,5 +283,5 @@ button.banner { width: 100%; font-family: inherit; text-align: left; cursor: poi
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .btn, button.card, a.card { transition: none; }
+  .btn, button.card, a.card, .card.tappable { transition: none; }
 }

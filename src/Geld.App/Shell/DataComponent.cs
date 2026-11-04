@@ -2,11 +2,16 @@ using Microsoft.AspNetCore.Components;
 
 namespace Geld.App.Shell;
 
-/// <summary>A page that shows the user's data, and shows it anew when a sync brings changes while it is open.</summary>
-public abstract class DataPage : ComponentBase, IDisposable
+/// <summary>A component that shows the user's data and redraws when it changes, also through a sync.</summary>
+public abstract class DataComponent : ComponentBase, IDisposable
 {
-    // Only to hear of changes: pages read and change the data through the services of their area.
+    // Only to hear of changes. Pages read and change the data through their area's service.
     [Inject] private AppState State { get; set; } = null!;
+
+    [Inject] private TimeProvider Clock { get; set; } = null!;
+
+    /// <summary>Asked anew on every render, never stored: the app may stay open across midnight.</summary>
+    protected DateOnly Today => Clock.Today();
 
     private bool listening;
 
@@ -17,7 +22,7 @@ public abstract class DataPage : ComponentBase, IDisposable
         return base.SetParametersAsync(parameters);
     }
 
-    /// <summary>Recomputes what the page derives from the data; the page renders anew afterwards.</summary>
+    /// <summary>Recomputes what the page derives from the data, before it renders again.</summary>
     protected virtual void OnDataChanged() { }
 
     public void Dispose()

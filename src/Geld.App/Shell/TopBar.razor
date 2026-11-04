@@ -28,9 +28,6 @@
     /// <summary>Small line above the title; makes the title larger.</summary>
     [Parameter] public string? Kicker { get; set; }
 
-    /// <summary>
-    /// Where the back button leads (relative to the app's base address). Without one, the page is a main page
-    /// and the bar links to the settings instead.
-    /// </summary>
+    /// <summary>Where the back button leads. A main page has none, and the bar links to the settings instead.</summary>
     [Parameter] public string? Back { get; set; }
 }

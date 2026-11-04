@@ -11,7 +11,7 @@ public class AccountTests : AppTestContext
     [Fact]
     public void Signed_out_it_offers_the_Microsoft_sign_in_which_returns_to_the_settings()
     {
-        var card = Render<AccountCard>();
+        var card = RenderAccountCard();
         card.WaitForAssertion(() => Assert.Equal("nein", card.Find(".account").TextContent));
 
         Button(card, "Mit Microsoft anmelden").Click();
@@ -23,7 +23,7 @@ public class AccountTests : AppTestContext
     public void A_member_sees_their_account_and_can_sign_out()
     {
         Server.User = AppServer.Anna;
-        var card = Render<AccountCard>();
+        var card = RenderAccountCard();
         card.WaitForAssertion(() => Assert.Equal("anna@example.com", card.Find(".account").TextContent));
         Assert.Empty(card.FindAll("code"));
 
@@ -37,7 +37,7 @@ public class AccountTests : AppTestContext
     {
         Server.User = AppServer.Stranger;
         Data.Kindergeld.Receive(Today, 518);
-        var card = Render<AccountCard>();
+        var card = RenderAccountCard();
 
         card.WaitForAssertion(() => Assert.Equal(AppServer.Stranger.Id, card.Find("code").TextContent));
         Assert.Empty(Server.Syncs);
@@ -56,7 +56,7 @@ public class AccountTests : AppTestContext
             "error" => new HttpResponseMessage(HttpStatusCode.InternalServerError),
             _ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("<!DOCTYPE html>", null, "text/html") },
         };
-        var card = Render<AccountCard>();
+        var card = RenderAccountCard();
 
         card.WaitForAssertion(() => Assert.Equal("Server nicht erreichbar", card.Find(".account").TextContent));
         Assert.Empty(card.FindAll("button"));

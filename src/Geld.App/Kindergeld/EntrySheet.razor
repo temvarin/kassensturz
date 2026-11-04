@@ -1,4 +1,3 @@
-@* Adds or edits a Kindergeld entry. The page applies the result to the pot. *@
 
 <Sheet Title="@title" OnClose="OnClose">
     <form @onsubmit="Submit">
@@ -39,7 +38,7 @@
 
     [Parameter, EditorRequired] public EntryKind Kind { get; set; }
 
-    /// <summary>The entry to edit; null to add a new one.</summary>
+    /// <summary>null for a new entry.</summary>
     [Parameter] public Entry? Existing { get; set; }
 
     [Parameter, EditorRequired] public DateOnly Today { get; set; }

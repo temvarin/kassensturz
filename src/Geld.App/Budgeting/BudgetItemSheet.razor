@@ -1,4 +1,4 @@
-@* Adds or edits a fixed cost (with a day of the month) or a planned spending (without). The page applies the result. *@
+@* Adds or edits a fixed cost, which has a schedule, or a planned spending, which has none. *@
 
 <Sheet Title="@Title" OnClose="OnClose">
     <form @onsubmit="Submit">
@@ -10,9 +10,16 @@
                 <div class="error" role="alert">Bitte benennen</div>
             }
         </label>
+        @if (Schedule is not null)
+        {
+            <div class="segmented two" role="group" aria-label="Rhythmus">
+                <button type="button" aria-pressed="@(everyFewWeeks ? "false" : "true")" @onclick="() => everyFewWeeks = false">Jeden Monat</button>
+                <button type="button" aria-pressed="@(everyFewWeeks ? "true" : "false")" @onclick="() => everyFewWeeks = true">Alle paar Wochen</button>
+            </div>
+        }
         <div class="fields">
             <AmountField @bind-Value="amount" Error="@amountError" />
-            @if (Day is not null)
+            @if (Schedule is not null && !everyFewWeeks)
             {
                 <label class="field">
                     <span>Abbuchung am</span>
@@ -24,7 +31,26 @@
                     </select>
                 </label>
             }
+            @if (Schedule is not null && everyFewWeeks)
+            {
+                <label class="field">
+                    <span>Alle</span>
+                    <select @bind="weeks">
+                        @for (var w = 1; w <= 8; w++)
+                        {
+                            <option value="@w">@w @(w == 1 ? "Woche" : "Wochen")</option>
+                        }
+                    </select>
+                </label>
+            }
         </div>
+        @if (Schedule is not null && everyFewWeeks)
+        {
+            <label class="field">
+                <span>Erste Abbuchung</span>
+                <input type="date" @bind="first" required />
+            </label>
+        }
         <button type="submit" class="btn primary">Speichern</button>
         @if (OnDelete.HasDelegate)
         {
@@ -34,33 +60,47 @@
 </Sheet>
 
 @code {
-    public sealed record Result(string Name, decimal Amount, int? Day);
+    public sealed record Result(string Name, decimal Amount, Schedule? Schedule);
 
     [Parameter, EditorRequired] public string Title { get; set; } = "";
     [Parameter] public string NamePlaceholder { get; set; } = "";
     [Parameter] public string Name { get; set; } = "";
     [Parameter] public decimal? Amount { get; set; }
 
-    /// <summary>Day of the month for a fixed cost; null for a planned spending, which has no day.</summary>
-    [Parameter] public int? Day { get; set; }
+    /// <summary>null for a planned spending, which has no schedule.</summary>
+    [Parameter] public Schedule? Schedule { get; set; }
+
+    /// <summary>The first date a new cost every few weeks starts with.</summary>
+    [Parameter, EditorRequired] public DateOnly Today { get; set; }
 
     [Parameter, EditorRequired] public EventCallback<Result> OnSave { get; set; }
 
-    /// <summary>Shows a delete button when set (when editing).</summary>
+    /// <summary>Shows a delete button when set.</summary>
     [Parameter] public EventCallback OnDelete { get; set; }
 
     [Parameter, EditorRequired] public EventCallback OnClose { get; set; }
 
     private string name = "", amount = "";
-    private int day;
     private bool nameError;
     private string? amountError;
+    private bool everyFewWeeks;
+    private int day = 1, weeks = 4;
+    private DateOnly first;
 
     protected override void OnInitialized()
     {
         name = Name;
         amount = Amount is { } a ? Euro.ToInput(a) : "";
-        day = Day ?? 1;
+        first = Today;
+        switch (Schedule)
+        {
+            case MonthlyOn monthly:
+                day = monthly.Day;
+                break;
+            case EveryWeeks every:
+                (everyFewWeeks, weeks, first) = (true, every.Weeks, every.First);
+                break;
+        }
     }
 
     private async Task Submit()
@@ -69,6 +109,7 @@
         var validAmount = Euro.TryParse(amount, out var value) && BudgetRules.IsAmount(value);
         amountError = validAmount ? null : AmountField.Hint;
         if (nameError || !validAmount) return;
-        await OnSave.InvokeAsync(new Result(name, value, Day is null ? null : day));
+        Schedule? schedule = Schedule is null ? null : everyFewWeeks ? new EveryWeeks(weeks, first) : new MonthlyOn(day);
+        await OnSave.InvokeAsync(new Result(name, value, schedule));
     }
 }

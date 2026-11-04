@@ -15,7 +15,7 @@ public class SyncTests : AppTestContext
     /// <summary>The account card, once the sync at start has finished.</summary>
     private IRenderedComponent<AccountCard> Started(string status = "gerade eben")
     {
-        var card = Render<AccountCard>();
+        var card = RenderAccountCard();
         card.WaitForAssertion(() => Assert.Equal(status, card.Find(".sync").TextContent));
         return card;
     }
@@ -38,7 +38,7 @@ public class SyncTests : AppTestContext
     [Fact]
     public void A_save_is_sent_two_seconds_later()
     {
-        var card = Started();
+        Started();
         State.Change(data => data.Kindergeld.Receive(Today, 518));
         Assert.Single(Server.Syncs);
 
@@ -67,7 +67,7 @@ public class SyncTests : AppTestContext
     public async Task An_app_opened_offline_syncs_when_it_comes_back_online()
     {
         Server.Override = _ => throw new HttpRequestException("offline");
-        var card = Render<AccountCard>();
+        var card = RenderAccountCard();
         card.WaitForAssertion(() => Assert.Equal("Server nicht erreichbar", card.Find(".account").TextContent));
 
         Server.Override = null;
@@ -80,7 +80,7 @@ public class SyncTests : AppTestContext
     public void A_change_made_during_a_sync_waits_for_it_and_then_goes_out()
     {
         Server.Hold = new TaskCompletionSource();
-        var card = Render<AccountCard>();
+        var card = RenderAccountCard();
         Eventually(() => Assert.Single(Server.Syncs)); // under way, and held
 
         Entry payment = null!;
@@ -99,7 +99,7 @@ public class SyncTests : AppTestContext
     public void A_failed_sync_is_tried_once_more_after_30_seconds()
     {
         Server.Next.Enqueue(() => Error(HttpStatusCode.ServiceUnavailable));
-        var card = Render<AccountCard>();
+        var card = RenderAccountCard();
         Eventually(() => Assert.Single(Server.Syncs));
 
         Clock.Advance(SyncService.RetryAfter);
@@ -111,7 +111,7 @@ public class SyncTests : AppTestContext
     public void While_a_failed_sync_waits_for_its_second_try_the_settings_say_it_failed()
     {
         Server.Next.Enqueue(() => Error(HttpStatusCode.ServiceUnavailable));
-        var card = Render<AccountCard>();
+        var card = RenderAccountCard();
         Eventually(() => Assert.Single(Server.Syncs));
 
         card.WaitForAssertion(() => Assert.Equal("fehlgeschlagen", card.Find(".sync").TextContent));
@@ -123,7 +123,7 @@ public class SyncTests : AppTestContext
     public void Syncing_now_during_the_wait_tries_again_at_once()
     {
         Server.Next.Enqueue(() => Error(HttpStatusCode.ServiceUnavailable));
-        var card = Render<AccountCard>();
+        var card = RenderAccountCard();
         card.WaitForAssertion(() => Assert.Equal("fehlgeschlagen", card.Find(".sync").TextContent));
 
         Button(card, "Jetzt synchronisieren").Click(); // the clock stands still: no waiting for RetryAfter
@@ -133,12 +133,30 @@ public class SyncTests : AppTestContext
     }
 
     [Fact]
+    public void Changes_the_server_refuses_are_kept_and_not_sent_again()
+    {
+        Server.Next.Enqueue(() => Error(HttpStatusCode.BadRequest));
+        Data.Kindergeld.Receive(Today, 518);
+        var card = RenderAccountCard();
+        card.WaitForAssertion(() => Assert.Equal("abgelehnt", card.Find(".sync").TextContent));
+
+        Clock.Advance(SyncService.RetryAfter);
+        Services.GetRequiredService<KindergeldService>().ReceiveMonth();
+        Clock.Advance(SyncService.AfterSave);
+
+        Assert.Single(Server.Syncs);
+        Assert.Equal(2, Stored.Kindergeld.Entries.Count);
+        Assert.Contains("abgelehnt", card.Markup);
+        Assert.DoesNotContain(card.FindAll("button"), b => b.TextContent.Contains("Jetzt synchronisieren", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void When_the_second_try_fails_too_the_changes_wait_for_the_next_sync()
     {
         Server.Next.Enqueue(() => Error(HttpStatusCode.InternalServerError));
         Server.Next.Enqueue(() => throw new HttpRequestException("offline"));
         Data.Kindergeld.Receive(Today, 518);
-        var card = Render<AccountCard>();
+        var card = RenderAccountCard();
         Eventually(() => Assert.Single(Server.Syncs));
         Clock.Advance(SyncService.RetryAfter);
 
@@ -157,7 +175,7 @@ public class SyncTests : AppTestContext
     {
         var shoes = Data.Kindergeld.Spend(Today, 35, "Kleidung");
         Server.LoseNextAnswer = true;
-        var card = Render<AccountCard>();
+        var card = RenderAccountCard();
         Eventually(() => Assert.Single(Server.Kindergeld.Entries)); // saved, but the app doesn't know
 
         State.Change(data => data.Kindergeld.Remove(shoes.Id));
@@ -173,7 +191,7 @@ public class SyncTests : AppTestContext
     {
         Started();
         Server.User = AppServer.Ben; // signed in in another tab; this app still thinks Anna is: the server says 412
-        var card = Render<AccountCard>();
+        var card = RenderAccountCard();
 
         State.Change(data => data.Budget.SetSalary(2850));
         Clock.Advance(SyncService.AfterSave);
@@ -198,7 +216,7 @@ public class SyncTests : AppTestContext
     {
         Server.Next.Enqueue(() => Error(HttpStatusCode.Unauthorized));
 
-        var card = Render<AccountCard>();
+        var card = RenderAccountCard();
 
         card.WaitForAssertion(() => Button(card, "Mit Microsoft anmelden"));
         Assert.Equal("nein", card.Find(".account").TextContent);
@@ -210,7 +228,7 @@ public class SyncTests : AppTestContext
         Data.Kindergeld.Receive(Today, 100);
         Data.Synced.CompleteSync(Data.Synced.StartSync(AppServer.Ben.Id), new SyncResponse(new KindergeldPot(), new Budget()), Clock.GetUtcNow());
         var annas = await Server.OnOtherPhone(AppServer.Anna, phone => phone.Kindergeld.Receive(Today, 518));
-        var card = Render<AccountCard>();
+        var card = RenderAccountCard();
         card.WaitForAssertion(() => Button(card, "Daten auf diesem Gerät zurücksetzen"));
         Assert.Empty(Server.Syncs);
         Dialogs.Changed += () => Dialogs.Close(Dialogs.Current is { Cancel: not null });
@@ -259,7 +277,7 @@ public class SyncTests : AppTestContext
         await Server.OnOtherPhone(AppServer.Anna, phone => // Anna's other device
         {
             phone.Kindergeld.Receive(Today, 518);
-            return phone.Budget.AddDeduction("Miete", 1150, 1);
+            return phone.Budget.AddDeduction("Miete", 1150, new MonthlyOn(1));
         });
         var home = Render<Home>();
         var month = Render<MonthBudget>();

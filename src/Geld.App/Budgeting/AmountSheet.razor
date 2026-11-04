@@ -1,0 +1,51 @@
+@* A sheet for a single amount, such as the salary or the Rücklage, with an optional hint below the field. *@
+
+<Sheet Title="@Title" OnClose="OnClose">
+    <form @onsubmit="Submit">
+        <AmountField Label="@Label" @bind-Value="text" Error="@error" Autofocus />
+        @if (ChildContent is not null)
+        {
+            <p class="hint sheet-hint">@ChildContent</p>
+        }
+        <button type="submit" class="btn primary">Speichern</button>
+        @if (OnDelete.HasDelegate)
+        {
+            <button type="button" class="btn danger" @onclick="OnDelete"><Icon Name="trash" />@DeleteLabel</button>
+        }
+    </form>
+</Sheet>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public string Label { get; set; } = "Betrag in €";
+
+    /// <summary>The amount the field starts with; null for an empty field.</summary>
+    [Parameter] public decimal? Amount { get; set; }
+
+    /// <summary>The domain's rule for this amount, e.g. <see cref="BudgetRules.IsSalary"/>.</summary>
+    [Parameter, EditorRequired] public Func<decimal, bool> Accepts { get; set; } = null!;
+
+    [Parameter, EditorRequired] public EventCallback<decimal> OnSave { get; set; }
+
+    /// <summary>Shows a delete button when set.</summary>
+    [Parameter] public EventCallback OnDelete { get; set; }
+
+    [Parameter] public string DeleteLabel { get; set; } = "Löschen";
+    [Parameter, EditorRequired] public EventCallback OnClose { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private string text = "";
+    private string? error;
+
+    protected override void OnInitialized() => text = Amount is { } amount ? Euro.ToInput(amount) : "";
+
+    private async Task Submit()
+    {
+        if (!Euro.TryParse(text, out var amount) || !Accepts(amount))
+        {
+            error = AmountField.Hint;
+            return;
+        }
+        await OnSave.InvokeAsync(amount);
+    }
+}

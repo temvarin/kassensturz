@@ -2,13 +2,17 @@
 // than in an inline script in index.html, which the server's Content Security Policy doesn't allow.
 navigator.serviceWorker?.register('service-worker.js', { updateViaCache: 'none' });
 
-// Browser features the app calls from .NET (Services/Browser.cs).
+// Browser features the app calls from .NET (Shell/Browser.cs).
 window.geld = {
   // Browsers may delete a site's storage when the device runs low on space, unless the site is marked persistent.
-  // They grant or refuse this on their own (installed apps usually get it) without asking the user.
+  // Most grant or refuse this on their own (installed apps usually get it); some ask the user.
   async protectStorage() {
     if (!navigator.storage?.persist) return false;
-    return await navigator.storage.persisted() || await navigator.storage.persist();
+    try {
+      return await navigator.storage.persisted() || await navigator.storage.persist();
+    } catch {
+      return false;
+    }
   },
 
   // On a phone, the share sheet is how a file gets into Files, iCloud Drive or Google Drive; a computer downloads it.

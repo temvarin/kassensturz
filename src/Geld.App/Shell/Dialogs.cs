@@ -4,8 +4,8 @@ namespace Geld.App.Shell;
 public sealed record MessageModal(string Message, string Ok, string? Cancel, bool Danger, TaskCompletionSource<bool> Result);
 
 /// <summary>
-/// In-app dialogs, shown by <c>DialogHost</c>. Replaces confirm()/alert(): some browsers and embedded views
-/// suppress native dialogs, which makes confirm() silently return false.
+/// In-app dialogs instead of confirm() and alert(), which some browsers and embedded views suppress, so that confirm()
+/// silently returns false.
 /// </summary>
 public sealed class Dialogs
 {
@@ -23,7 +23,6 @@ public sealed class Dialogs
         return result.Task;
     }
 
-    /// <summary>A message with an OK button.</summary>
     public void Alert(string message) => _ = Confirm(message);
 
     public void Close(bool result = false)

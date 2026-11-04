@@ -1,5 +1,5 @@
-@* Stored data this version couldn't read was kept aside when the app started (DataStore.Load). Until the user saves
-   or discards it in the settings, this says why the app looks empty. *@
+@* Says why the app looks empty while unreadable stored data waits in the settings to be saved or discarded. *@
+@inherits DataComponent
 @inject BackupService Backup
 
 @if (Backup.Unreadable is not null)

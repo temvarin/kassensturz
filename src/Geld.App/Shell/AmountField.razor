@@ -1,4 +1,4 @@
-@* An amount in euros, typed as text: the phone shows a number pad with a comma or a dot (Euro.TryParse reads both). *@
+@* Typed as text, so the phone shows a number pad with a comma or a dot. Euro.TryParse reads both. *@
 
 <label class="field">
     <span>@Label</span>
@@ -20,7 +20,6 @@
     [Parameter] public EventCallback<string> ValueChanged { get; set; }
     [Parameter] public string? Error { get; set; }
 
-    /// <summary>Focuses the field when the form opens.</summary>
     [Parameter] public bool Autofocus { get; set; }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

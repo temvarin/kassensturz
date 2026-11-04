@@ -1,6 +1,5 @@
 @* Settings: backup files, and whether the browser protects the storage. *@
-@inherits DataPage
-@inject TimeProvider Clock
+@inherits DataComponent
 @inject Browser Browser
 @inject Dialogs Dialogs
 @inject BackupService Backup
@@ -36,7 +35,6 @@
 @code {
     private const long MaxBackupBytes = 5_000_000;
 
-    private DateOnly Today => Clock.Today(); // never stored: the app may stay open across midnight
     private bool? storageProtected;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -56,7 +54,7 @@
         }
         catch (IOException)
         {
-            Dialogs.Alert("Die Datei ließ sich nicht lesen. Ist sie größer als 5 MB?");
+            Dialogs.Alert($"Die Datei ließ sich nicht lesen. Ist sie größer als {MaxBackupBytes / 1_000_000} MB?");
             return;
         }
 

@@ -4,8 +4,8 @@ using System.Text.RegularExpressions;
 namespace Geld.App.Shell;
 
 /// <summary>
-/// Euro amounts the German way: "1.351,82 €". The app ships without culture data (InvariantGlobalization),
-/// so the format is spelled out here instead of coming from a de-DE culture.
+/// Euro amounts the German way, "1.351,82 €". The app ships without culture data (InvariantGlobalization), so the
+/// format is spelled out here.
 /// </summary>
 public static partial class Euro
 {
@@ -18,15 +18,13 @@ public static partial class Euro
 
     public static string Format(decimal amount) => amount.ToString("#,##0.00", German) + " €";
 
-    /// <summary>With an explicit sign, for money moving in (+) or out (−).</summary>
     public static string WithSign(decimal amount) => (amount > 0 ? "+" : "") + Format(amount);
 
     /// <summary>
-    /// Reads a typed amount: up to nine digits with a comma or a dot before at most two decimals ("12,50", "12.5",
-    /// "300"). The German keypad on iOS types a comma, others a dot. A trailing "€" is allowed. Only the format: which
-    /// amounts a field accepts is the domain's to say (KindergeldRules, BudgetRules).
+    /// Reads "12,50", "12.5" or "300 €": up to nine digits, then a comma or a dot and up to two decimals. The German
+    /// iOS keypad types a comma, others a dot. Only the format is checked here; which amounts a field accepts is the
+    /// domain's rule (KindergeldRules, BudgetRules).
     /// </summary>
-    /// <returns>false for anything else.</returns>
     public static bool TryParse(string? text, out decimal amount)
     {
         amount = 0;
@@ -36,7 +34,7 @@ public static partial class Euro
         return true;
     }
 
-    /// <summary>The amount as it is typed back into an input field: "12,50".</summary>
+    /// <summary>"12,50", as it goes back into an input field.</summary>
     public static string ToInput(decimal amount) => amount.ToString("0.00", German);
 
     [GeneratedRegex(@"^\d{1,9}([.,]\d{1,2})?$")]

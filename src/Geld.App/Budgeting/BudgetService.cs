@@ -2,36 +2,37 @@ using Geld.Domain.Budgeting;
 
 namespace Geld.App.Budgeting;
 
-/// <summary>The pages' way into the monthly budget: the budget to show, and one method per thing the user does.</summary>
-public sealed class BudgetService(Slot<Budget> budget, TimeProvider clock)
+/// <summary>The pages' way into the budget: the budget to show, and one method per thing the user does.</summary>
+public sealed class BudgetService(AppState state, TimeProvider clock)
 {
-    /// <summary>For reading. Changes go through the methods here, which save them.</summary>
-    public IReadOnlyBudget Budget => budget.Current;
+    public IReadOnlyBudget Budget => state.Data.Budget;
 
-    public void SetSalary(decimal netSalary) => budget.Change(b => b.SetSalary(netSalary));
+    public void SetSalary(decimal netSalary) => Change(b => b.SetSalary(netSalary));
 
-    /// <summary>The Rücklage as the user sees it on their account today.</summary>
-    public void SetReserve(decimal amount) => budget.Change(b => b.SetReserve(amount, clock.Today()));
+    /// <summary>The Rücklage as the user sees it on their bank account today.</summary>
+    public void SetReserve(decimal amount) => Change(b => b.SetReserve(amount, clock.Today()));
 
-    public void RemoveReserve() => budget.Change(b => b.RemoveReserve());
+    public void RemoveReserve() => Change(b => b.RemoveReserve());
 
-    /// <param name="id">The fixed cost being edited; null for a new one. Removed meanwhile by a sync: added anew.</param>
-    public void SaveDeduction(Guid? id, string name, decimal amount, int day) => budget.Change(b =>
+    /// <param name="id">The fixed cost being edited, or null. If a sync removed it meanwhile, it is added again.</param>
+    public void SaveDeduction(Guid? id, string name, decimal amount, Schedule schedule) => Change(b =>
     {
         if (b.Deductions.FirstOrDefault(d => d.Id == id) is { } existing)
-            b.UpdateDeduction(existing with { Name = name, Amount = amount, Day = day });
-        else b.AddDeduction(name, amount, day);
+            b.UpdateDeduction(existing with { Name = name, Amount = amount, Schedule = schedule });
+        else b.AddDeduction(name, amount, schedule);
     });
 
-    public void RemoveDeduction(Guid id) => budget.Change(b => b.RemoveDeduction(id));
+    public void RemoveDeduction(Guid id) => Change(b => b.RemoveDeduction(id));
 
-    /// <param name="id">The planned spending being edited; null for a new one. Removed meanwhile by a sync: added anew.</param>
-    public void SavePlanned(Guid? id, int year, int month, string name, decimal amount) => budget.Change(b =>
+    /// <param name="id">The planned spending being edited, or null. If a sync removed it meanwhile, it is added again.</param>
+    public void SavePlanned(Guid? id, int year, int month, string name, decimal amount) => Change(b =>
     {
         if (b.Planned.FirstOrDefault(p => p.Id == id) is { } existing)
             b.UpdatePlanned(existing with { Name = name, Amount = amount });
         else b.Plan(year, month, name, amount);
     });
 
-    public void RemovePlanned(Guid id) => budget.Change(b => b.RemovePlanned(id));
+    public void RemovePlanned(Guid id) => Change(b => b.RemovePlanned(id));
+
+    private void Change(Action<Budget> change) => state.Change(data => change(data.Budget));
 }

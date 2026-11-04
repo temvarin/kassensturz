@@ -1,6 +1,6 @@
 namespace Geld.App.Shell;
 
-/// <summary>Dates in German. The app ships without culture data (InvariantGlobalization), so the names are spelled out.</summary>
+/// <summary>Dates in German, spelled out because the app ships without culture data.</summary>
 public static class German
 {
     private static readonly string[] Months =
@@ -17,10 +17,13 @@ public static class German
     /// <summary>"11. November".</summary>
     public static string DayMonth(DateOnly date) => $"{date.Day}. {MonthName(date.Month)}";
 
+    /// <summary>"14.10.", for short notes.</summary>
+    public static string DayMonthNumbers(DateOnly date) => $"{date.Day:00}.{date.Month:00}.";
+
     /// <summary>"12.10.2026", for lists.</summary>
     public static string Date(DateOnly date) => $"{date.Day:00}.{date.Month:00}.{date.Year}";
 
-    /// <summary>"heute", "morgen", "in 28 Tagen" – or "gestern", "vor 3 Tagen" for the past.</summary>
+    /// <summary>"heute", "morgen", "in 28 Tagen", "gestern", "vor 3 Tagen".</summary>
     public static string Relative(DateOnly date, DateOnly today) => (date.DayNumber - today.DayNumber) switch
     {
         0 => "heute",
@@ -30,7 +33,7 @@ public static class German
         var days => $"vor {-days} Tagen",
     };
 
-    /// <summary>"gerade eben", "vor 5 Min.", "vor 3 Std." – and from a day back on as <see cref="Relative"/>.</summary>
+    /// <summary>"gerade eben", "vor 5 Min.", "vor 3 Std.", and from a day on as <see cref="Relative"/>.</summary>
     public static string Ago(this TimeProvider clock, DateTimeOffset time) => (clock.GetUtcNow() - time) switch
     {
         { TotalMinutes: < 1 } => "gerade eben",
@@ -38,6 +41,4 @@ public static class German
         { TotalDays: < 1 } and var span => $"vor {(int)span.TotalHours} Std.",
         _ => Relative(DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(time, clock.LocalTimeZone).DateTime), clock.Today()),
     };
-
-    public static DateOnly Today(this TimeProvider clock) => DateOnly.FromDateTime(clock.GetLocalNow().DateTime);
 }

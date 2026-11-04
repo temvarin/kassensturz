@@ -52,6 +52,14 @@ public abstract class AppTestContext : BunitContext
         }
     }
 
+    /// <summary>The account card, with the sync started as the app's layout starts it.</summary>
+    protected IRenderedComponent<AccountCard> RenderAccountCard()
+    {
+        var card = Render<AccountCard>();
+        _ = Services.GetRequiredService<SyncService>().StartAsync();
+        return card;
+    }
+
     /// <summary>The button with this text or accessible label.</summary>
     protected static IElement Button<T>(IRenderedComponent<T> cut, string text) where T : IComponent =>
         cut.FindAll("button").Single(b => b.TextContent.Trim() == text || b.GetAttribute("aria-label") == text);

@@ -25,7 +25,7 @@
         Nav.LocationChanged += OnLocationChanged;
     }
 
-    private void OnChanged() => InvokeAsync(StateHasChanged);
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
 
     // A dialog belongs to the page that opened it.
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => Dialogs.Close();

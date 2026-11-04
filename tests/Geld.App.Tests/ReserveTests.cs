@@ -7,8 +7,8 @@ public class ReserveTests : AppTestContext
     public ReserveTests()
     {
         Data.Budget.SetSalary(2850);
-        Data.Budget.AddDeduction("Miete", 1150, 1);
-        Data.Budget.AddDeduction("Handy", 20, 15);
+        Data.Budget.AddDeduction("Miete", 1150, new MonthlyOn(1));
+        Data.Budget.AddDeduction("Handy", 20, new MonthlyOn(15));
         Data.Budget.Plan(2026, 10, "Urlaub", 1880); // 200 € more than the salary leaves
     }
 

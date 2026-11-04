@@ -4,6 +4,15 @@ namespace Geld.App.Tests;
 
 public class MonthBudgetTests : AppTestContext
 {
+    public MonthBudgetTests()
+    {
+        Data.Budget.SetSalary(2850);
+        Data.Budget.AddDeduction("Miete", 1150, new MonthlyOn(1));
+        Data.Budget.AddDeduction("Handy", 20, new MonthlyOn(15));
+        Data.Budget.Plan(2026, 10, "Make-up", 45);
+        Data.Budget.Plan(2026, 11, "Geschenk Oma", 30);
+    }
+
     [Fact]
     public void An_app_left_open_shows_the_new_month_when_it_comes_back_to_the_front()
     {
@@ -19,21 +28,11 @@ public class MonthBudgetTests : AppTestContext
     [Fact]
     public void Editing_the_salary_starts_with_the_current_one()
     {
-        Data.Budget.SetSalary(2850);
         var page = Render<MonthBudget>();
 
-        page.Find("button.card").Click();
+        Button(page, "Nettogehalt ändern").Click();
 
         Assert.Equal("2850,00", page.Find(".sheet input[inputmode=decimal]").GetAttribute("value"));
-    }
-
-    public MonthBudgetTests()
-    {
-        Data.Budget.SetSalary(2850);
-        Data.Budget.AddDeduction("Miete", 1150, 1);
-        Data.Budget.AddDeduction("Handy", 20, 15);
-        Data.Budget.Plan(2026, 10, "Make-up", 45);
-        Data.Budget.Plan(2026, 11, "Geschenk Oma", 30);
     }
 
     [Fact]
@@ -93,7 +92,39 @@ public class MonthBudgetTests : AppTestContext
         page.Find(".sheet form").Submit();
 
         Assert.Equal(["Miete", "Spotify", "Handy"], Stored.Budget.Deductions.Select(d => d.Name));
-        Assert.Equal(3, Stored.Budget.Deductions[1].Day);
+        Assert.Equal(new MonthlyOn(3), Stored.Budget.Deductions[1].Schedule);
+    }
+
+    [Fact]
+    public void A_fixed_cost_can_repeat_every_few_weeks_and_shows_each_debit_in_its_month()
+    {
+        var page = Render<MonthBudget>();
+
+        Button(page, "Fixkosten hinzufügen").Click();
+        page.Find(".sheet input:not([inputmode])").Change("Kita-Essen");
+        page.Find(".sheet input[inputmode=decimal]").Change("62");
+        Button(page, "Alle paar Wochen").Click();
+        page.Find(".sheet input[type=date]").Change("2026-10-05");
+        page.Find(".sheet form").Submit(); // every 4 weeks unless changed
+
+        Assert.Equal(new EveryWeeks(4, new DateOnly(2026, 10, 5)), Stored.Budget.Deductions.Single(d => d.Name == "Kita-Essen").Schedule);
+        Button(page, "Nächster Monat").Click();
+        var november = page.FindAll(".line").Where(line => line.TextContent.Contains("Kita-Essen", StringComparison.Ordinal)).ToList();
+        Assert.Equal(["2.", "30."], november.Select(line => line.QuerySelector(".day")!.TextContent));
+        Assert.All(november, line => Assert.Contains("alle 4 Wochen", line.TextContent));
+    }
+
+    [Fact]
+    public void Editing_a_cost_every_few_weeks_starts_with_its_rhythm()
+    {
+        Data.Budget.AddDeduction("Kita-Essen", 62, new EveryWeeks(2, new DateOnly(2026, 10, 5)));
+        var page = Render<MonthBudget>();
+
+        page.FindAll(".line").First(line => line.TextContent.Contains("Kita-Essen", StringComparison.Ordinal)).Click();
+
+        Assert.Equal("true", Button(page, "Alle paar Wochen").GetAttribute("aria-pressed"));
+        Assert.Equal("2", page.Find(".sheet select").GetAttribute("value"));
+        Assert.Equal("2026-10-05", page.Find(".sheet input[type=date]").GetAttribute("value"));
     }
 
     [Fact]

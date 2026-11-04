@@ -7,29 +7,26 @@ public enum ImportResult
 {
     Restored,
 
-    /// <summary>Not a backup of this app, or of a version it doesn't know, or it breaks the app's rules.</summary>
+    /// <summary>Not a backup of this app, from an unknown version, or against the app's rules.</summary>
     NotABackup,
 
-    /// <summary>The user chose to keep the data on this device.</summary>
     Kept,
 }
 
 /// <summary>
-/// Copies of the data outside the browser, which may delete its storage without warning (ADR 1): backup files, the
-/// reminder to make one, and stored data this version couldn't read.
+/// Copies of the data outside the browser, which may delete its storage without warning: backup files, the reminder
+/// to make one, and stored data this version couldn't read.
 /// </summary>
 public sealed class BackupService(AppState state, DataStore store, Browser browser, TimeProvider clock)
 {
-    /// <summary>null if never.</summary>
     public DateOnly? LastBackup => state.Data.LastBackup;
 
-    /// <summary>Whether the data has a copy on the server too, which changes what a backup is for.</summary>
+    /// <summary>With a copy on the server, a backup is for something else, so the settings say so.</summary>
     public bool IsSynced => state.Data.Synced.State is not null;
 
-    /// <summary>Whether to remind the user: there is data, and no backup in the last 30 days.</summary>
     public bool IsDue => state.Data.NeedsBackup(clock.Today());
 
-    /// <summary>Hands a backup file to the share sheet; it counts as made only if the user saved it.</summary>
+    /// <summary>A backup counts as made only if the user really saved the file.</summary>
     public async Task ExportAsync()
     {
         var today = clock.Today();
@@ -37,8 +34,7 @@ public sealed class BackupService(AppState state, DataStore store, Browser brows
             state.Change(data => data.MarkBackedUp(today));
     }
 
-    /// <summary>Replaces the data on this device with a backup file's.</summary>
-    /// <param name="confirmReplace">Asked only if there is data to lose; false keeps it.</param>
+    /// <param name="confirmReplace">Asked only if there is data to lose.</param>
     public async Task<ImportResult> ImportAsync(string json, Func<Task<bool>> confirmReplace)
     {
         if (DataStore.TryRead(json) is not { } backup) return ImportResult.NotABackup;
@@ -47,10 +43,9 @@ public sealed class BackupService(AppState state, DataStore store, Browser brows
         return ImportResult.Restored;
     }
 
-    /// <summary>Stored data this version couldn't read, kept aside when the app started; null if there is none.</summary>
     public string? Unreadable => store.Unreadable;
 
-    /// <summary>Exactly as it was stored: a version of the app that knows it can load the file as a backup.</summary>
+    /// <summary>Saved exactly as it was stored, so a version that knows it can load the file as a backup.</summary>
     public async Task SaveUnreadableAsync()
     {
         if (store.Unreadable is { } unreadable) await browser.SaveFileAsync(FileName(clock.Today(), "nicht-lesbar-"), unreadable);

@@ -1,6 +1,5 @@
 @page "/statistik"
-@inherits DataPage
-@inject TimeProvider Clock
+@inherits DataComponent
 @inject KindergeldService Kindergeld
 
 <TopBar Title="Statistik" Kicker="Kindergeld" />
@@ -30,7 +29,7 @@
                 <div class="bar-row">
                     <span>@c.Category</span>
                     <span class="amount">@Euro.Format(c.Amount)</span>
-                    <div class="track"><div style="width: @Share(c.Amount, byCategory[0].Amount)"></div></div>
+                    <div class="track"><div style="width: @Css.Percent(c.Amount, byCategory[0].Amount)"></div></div>
                 </div>
             }
         </div>
@@ -46,7 +45,7 @@
     else
     {
         <div class="legend">
-            <span><i class="fixed"></i>erhalten</span>
+            <span><i class="in"></i>erhalten</span>
             <span><i></i>ausgegeben</span>
         </div>
         <div class="months">
@@ -54,8 +53,8 @@
             {
                 <span class="label">@German.MonthShort(m.Month)</span>
                 <div class="pair-bars" aria-hidden="true">
-                    <div class="in" style="width: @Share(m.In, monthlyMax)" hidden="@(m.In == 0)"></div>
-                    <div class="out" style="width: @Share(m.Out, monthlyMax)" hidden="@(m.Out == 0)"></div>
+                    <div class="in" style="width: @Css.Percent(m.In, monthlyMax)" hidden="@(m.In == 0)"></div>
+                    <div class="out" style="width: @Css.Percent(m.Out, monthlyMax)" hidden="@(m.Out == 0)"></div>
                 </div>
                 <span class="amount">@Euro.WithSign(m.In)<small>@Euro.WithSign(-m.Out)</small></span>
             }
@@ -66,7 +65,6 @@
 @code {
     private enum Period { Month, Year, All }
 
-    private DateOnly Today => Clock.Today(); // never stored: the app may stay open across midnight
     private Period period = Period.Year;
     private IReadOnlyList<MonthTotals> monthly = [];
     private decimal monthlyMax;
@@ -80,7 +78,7 @@
     protected override void OnDataChanged()
     {
         Show(period);
-        // Newest first, from the first month with an entry: a new pot shouldn't show a year of empty rows.
+        // Newest first, starting with the first month that has an entry, so a new pot shows no empty year.
         monthly = [.. Pot.MonthlyTotals(Today, 12).SkipWhile(m => m.In == 0 && m.Out == 0).Reverse()];
         monthlyMax = monthly.Select(m => Math.Max(m.In, m.Out)).DefaultIfEmpty().Max();
     }
@@ -98,7 +96,4 @@
     }
 
     private static string Label(Period p) => p switch { Period.Month => "Monat", Period.Year => "Jahr", _ => "Gesamt" };
-
-    private static string Share(decimal amount, decimal max) =>
-        max == 0 ? "0%" : $"{Math.Round(amount / max * 100, 2).ToString(CultureInfo.InvariantCulture)}%";
 }
